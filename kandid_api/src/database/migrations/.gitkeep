@@ -1,0 +1,3 @@
+# Generated TypeORM migrations live here.
+# Create them with:
+#   npm run migration:generate -- src/database/migrations/NomeDaMigration

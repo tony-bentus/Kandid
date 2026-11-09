@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // O tech-lead orquestra o time; os demais agentes são subagentes.
+  "default_agent": "tech-lead",
+
+  "permissions": [
+    // Nunca leia ou edite segredos. `.env.example` é documentação e pode ser lido.
+    { "action": "read", "resource": "*.env*", "effect": "deny" },
+    { "action": "read", "resource": "*.env.example", "effect": "allow" },
+    { "action": "edit", "resource": "*.env*", "effect": "deny" },
+    { "action": "edit", "resource": "*.env.example", "effect": "allow" },
+
+    // Acesso a .env via shell continua bloqueado (best effort do scanner).
+    { "action": "shell", "resource": "*.env*", "effect": "deny" },
+    { "action": "shell", "resource": "*.env.example", "effect": "allow" },
+
+    // Ações remotas/destrutivas ficam bloqueadas ou exigem aprovação humana.
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+    { "action": "shell", "resource": "gh *", "effect": "deny" },
+    { "action": "shell", "resource": "docker push *", "effect": "deny" },
+    { "action": "shell", "resource": "git commit *", "effect": "ask" },
+    { "action": "shell", "resource": "git merge *", "effect": "ask" },
+    { "action": "shell", "resource": "git tag *", "effect": "ask" },
+    { "action": "shell", "resource": "npm run migration:run *", "effect": "ask" },
+    { "action": "shell", "resource": "npm run migration:revert *", "effect": "ask" }
+  ]
+}
