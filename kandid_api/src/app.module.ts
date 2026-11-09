@@ -7,6 +7,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import configuration from './config/configuration.js';
 import { validateEnv } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { HealthModule } from './health/health.module.js';
           logging: config.get<boolean>('database.logging') ?? false,
           retryAttempts: 3,
           retryDelay: 3000,
+          timezone: 'Z',
           ssl,
         };
         const url = config.get<string>('database.url');
@@ -49,6 +51,7 @@ import { HealthModule } from './health/health.module.js';
       },
     }),
     HealthModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [

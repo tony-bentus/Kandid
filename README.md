@@ -5,7 +5,7 @@
 ![NestJS](https://img.shields.io/badge/NestJS-12-E0234E)
 ![Node.js](https://img.shields.io/badge/Node.js-24-339933)
 ![MySQL](https://img.shields.io/badge/MySQL-8.4-4479A1)
-![Status](https://img.shields.io/badge/status-Sprint_0-yellow)
+![Status](https://img.shields.io/badge/status-Sprint_1-yellow)
 
 ## Visão geral
 
@@ -26,10 +26,12 @@ O Kandid propõe centralizar esse fluxo em uma única API:
 É um projeto **pessoal, de estudo e portfólio**, sem objetivo comercial. A
 especificação completa do domínio está em [`docs/prompt-kandid.md`](docs/prompt-kandid.md).
 
-> **Estado atual:** o projeto está na Sprint 0 (fundação). Já existem a aplicação
-> NestJS, a conexão com MySQL, o health check e o Swagger. Os endpoints de
-> autenticação e de domínio ainda não foram implementados; consulte
-> [Status atual](#status-atual-sprint-0) e [Roadmap](#roadmap-por-sprints).
+> **Estado atual:** o projeto está na Sprint 1 (autenticação). Já existem a
+> aplicação NestJS, a conexão com MySQL, o health check, o Swagger e as rotas de
+> registro, login e usuário autenticado. Os demais domínios (perfil, vagas,
+> candidaturas, currículos e ATS) ainda não foram implementados. O deploy do
+> ambiente demo foi conscientemente adiado para priorizar a API; consulte
+> [Status atual](#status-atual-sprint-1) e [Roadmap](#roadmap-por-sprints).
 
 ## Escopo do MVP
 
@@ -97,19 +99,25 @@ Decisões que moldam o código:
 
 ## Arquitetura
 
-Monólito modular em NestJS. Hoje a aplicação tem apenas a fundação:
+Monólito modular em NestJS. Hoje a aplicação tem a fundação e a autenticação:
 
 - `main.ts` configura o prefixo `/v1`, o `ValidationPipe`, CORS, o Swagger e a
   porta;
-- `app.module.ts` carrega configuração validada, TypeORM e o módulo de health;
+- `app.module.ts` carrega configuração validada, TypeORM, health, users e auth;
 - `database/data-source.ts` é o `DataSource` usado pelo CLI do TypeORM, com
   entidades e migrations carregadas por glob;
+- `database/migrations/1794182400000-CreateUsers.ts` cria a tabela `users`;
 - `health` executa `SELECT 1` para reportar o estado do banco;
-- `common/filters` concentra o filtro global de erros.
+- `modules/users` contém a entidade `User` (tabela `users`) e o `UsersService`;
+- `modules/auth` contém `AuthController`, `AuthService`, DTOs e a emissão de JWT;
+- `common/filters` concentra o filtro global de erros;
+- `common/guards` tem o `JwtAuthGuard`, implementado sem passport;
+- `common/decorators` tem o `@CurrentUser()`;
+- `common/interfaces` define o usuário autenticado;
+- `common/utils` concentra a normalização de e-mail.
 
-Os módulos de domínio serão criados em `src/modules/` seguindo o padrão
-`dto/`, `entities/`, `*.module.ts`, `*.controller.ts`, `*.service.ts` e
-`*.spec.ts`.
+Novos módulos seguem o padrão `dto/`, `entities/`, `*.module.ts`,
+`*.controller.ts`, `*.service.ts` e `*.spec.ts`.
 
 ```text
 Kandid/
@@ -128,19 +136,36 @@ Kandid/
 │   ├── adr/
 │   │   └── 0001-database.md
 │   ├── sprints/
-│   │   └── sprint-00.md
+│   │   ├── sprint-00.md
+│   │   └── sprint-01.md
 │   ├── backlog.md
 │   ├── prompt-kandid.md         # spec e fonte da verdade do domínio
 │   ├── runbook-deploy.md
 │   └── workflow.md
 ├── kandid_api/
 │   ├── src/
-│   │   ├── common/filters/
+│   │   ├── common/
+│   │   │   ├── decorators/
+│   │   │   ├── filters/
+│   │   │   ├── guards/
+│   │   │   ├── interfaces/
+│   │   │   └── utils/
 │   │   ├── config/
 │   │   ├── database/
 │   │   │   ├── data-source.ts
 │   │   │   └── migrations/
+│   │   │       └── 1794182400000-CreateUsers.ts
 │   │   ├── health/
+│   │   ├── modules/
+│   │   │   ├── auth/
+│   │   │   │   ├── dto/
+│   │   │   │   ├── auth.controller.ts
+│   │   │   │   ├── auth.module.ts
+│   │   │   │   └── auth.service.ts
+│   │   │   └── users/
+│   │   │       ├── entities/
+│   │   │       ├── users.module.ts
+│   │   │       └── users.service.ts
 │   │   ├── app.controller.ts
 │   │   ├── app.module.ts
 │   │   └── main.ts
@@ -157,8 +182,9 @@ Kandid/
 
 ### Modelo de domínio alvo
 
-Visão simplificada do modelo definido na spec. As entidades ainda não existem no
-banco; a primeira migration de domínio nasce na Sprint 1.
+Visão simplificada do modelo definido na spec. A entidade `USER` já existe na
+tabela `users`; `PROFILE` e as demais entidades ainda serão implementadas nas
+próximas sprints.
 
 ```mermaid
 erDiagram
@@ -208,8 +234,8 @@ Copy-Item .env.example .env
 O `docker-compose.yml` sobe MySQL 8.4 em `localhost:3306`, com banco `kandid` e
 usuário/senha `kandid`. Essas credenciais são apenas para desenvolvimento local.
 
-Nesta fase não há migrations de domínio. O `migration:run` valida a conexão e
-registra a tabela de controle `migrations`; a primeira migration nasce na Sprint 1.
+O `npm run migration:run` aplica a migration `1794182400000-CreateUsers`, que
+cria a tabela `users`. O TypeORM também mantém a tabela de controle `migrations`.
 
 URLs locais:
 
@@ -228,14 +254,17 @@ docker compose down
 
 ## Endpoints disponíveis
 
-Esta tabela reflete o estado atual do código. Rotas de autenticação e domínio
-ainda não estão implementadas.
+Esta tabela reflete o estado atual do código. As rotas de autenticação estão
+implementadas; os demais domínios ainda não.
 
-| Método | Rota | Descrição |
-|---|---|---|
-| `GET` | `/v1` | Metadados: nome, versão e links de documentação e health |
-| `GET` | `/v1/health` | Status da aplicação, versão, uptime e conexão com o banco |
-| `GET` | `/docs` | Swagger UI (não faz parte do prefixo `/v1`) |
+| Método | Rota | Autenticação | Descrição |
+|---|---|---|---|
+| `GET` | `/v1` | Pública | Metadados: nome, versão e links de documentação e health |
+| `GET` | `/v1/health` | Pública | Status da aplicação, versão, uptime e conexão com o banco |
+| `POST` | `/v1/auth/register` | Pública | Cria a conta e devolve `{ user, accessToken }` |
+| `POST` | `/v1/auth/login` | Pública | Autentica com e-mail e senha e devolve `{ user, accessToken }` |
+| `GET` | `/v1/auth/me` | Bearer JWT | Devolve o usuário autenticado pelo token |
+| `GET` | `/docs` | Pública | Swagger UI (não faz parte do prefixo `/v1`) |
 
 ### Exemplos com `curl`
 
@@ -282,6 +311,96 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/docs
 # 200
 ```
 
+Registrar usuário:
+
+```bash
+curl -s -X POST http://localhost:3000/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ana Souza","email":"ana.souza@example.com","password":"senha-segura-123"}'
+```
+
+```json
+{
+  "user": {
+    "id": "6f1c2a9e-3b7d-4c85-9f10-2a4d8e7b1c33",
+    "name": "Ana Souza",
+    "email": "ana.souza@example.com",
+    "createdAt": "2026-11-09T13:20:41.000Z",
+    "updatedAt": "2026-11-09T13:20:41.000Z"
+  },
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+Login e extração do token (requer `jq`):
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:3000/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ana.souza@example.com","password":"senha-segura-123"}' \
+  | jq -r '.accessToken')
+```
+
+O corpo de sucesso do login é o mesmo envelope `{ user, accessToken }` do
+register.
+
+Usuário autenticado:
+
+```bash
+curl -s http://localhost:3000/v1/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "id": "6f1c2a9e-3b7d-4c85-9f10-2a4d8e7b1c33",
+  "name": "Ana Souza",
+  "email": "ana.souza@example.com",
+  "createdAt": "2026-11-09T13:20:41.000Z",
+  "updatedAt": "2026-11-09T13:20:41.000Z"
+}
+```
+
+E-mail duplicado (409):
+
+```bash
+curl -s -X POST http://localhost:3000/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ana Souza","email":"ana.souza@example.com","password":"senha-segura-123"}'
+```
+
+```json
+{
+  "statusCode": 409,
+  "error": "Conflict",
+  "message": "Email already registered",
+  "path": "/v1/auth/register",
+  "timestamp": "2026-11-09T13:21:02.000Z"
+}
+```
+
+Login inválido (401), com a mesma resposta para e-mail inexistente e senha errada:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3000/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ana.souza@example.com","password":"senha-errada"}'
+# 401
+```
+
+```json
+{
+  "statusCode": 401,
+  "error": "Unauthorized",
+  "message": "Invalid email or password",
+  "path": "/v1/auth/login",
+  "timestamp": "2026-11-09T13:21:02.000Z"
+}
+```
+
+`GET /v1/auth/me` sem token também responde 401, com
+`Invalid or missing access token`.
+
 ## Scripts npm
 
 Execute todos dentro de `kandid_api/`.
@@ -304,7 +423,8 @@ Execute todos dentro de `kandid_api/`.
 | `npm run migration:show` | Lista migrations e status |
 | `npm run migration:revert` | Reverte a última migration (apenas local) |
 
-O deploy do ambiente demo é feito pelo workflow `cd.yml`, não por um script npm.
+Quando o CD for retomado, o deploy do ambiente demo será feito pelo workflow
+`cd.yml`, não por um script npm.
 
 ## Testes e qualidade
 
@@ -316,11 +436,24 @@ Os testes usam Vitest com globals e supertest:
 | Unitário — health | `src/health/health.controller.spec.ts` | 2 |
 | Unitário — validação de env | `src/config/env.validation.spec.ts` | 8 |
 | Unitário — filtro de erros | `src/common/filters/all-exceptions.filter.spec.ts` | 3 |
+| Unitário — auth service | `src/modules/auth/auth.service.spec.ts` | 8 |
+| Unitário — users service | `src/modules/users/users.service.spec.ts` | 4 |
+| Unitário — guard JWT | `src/common/guards/jwt-auth.guard.spec.ts` | 11 |
+| Unitário — DTOs de auth | `src/modules/auth/dto/auth.dto.spec.ts` | 13 |
+| **Total unitário** | **8 arquivos** | **50** |
+| E2E — auth | `test/auth.e2e-spec.ts` | 25 |
 | E2E — API, health e erro | `test/app.e2e-spec.ts` | 3 |
+| **Total e2e** | **2 arquivos** | **28** |
 
 Os testes unitários cobrem os arquivos `*.spec.ts`. Os testes e2e usam
 `*.e2e-spec.ts` e exigem um MySQL acessível: Docker Compose local ou o service
 container do CI.
+
+> **Limitação no Windows:** `npm run lint` usa `oxlint --type-aware` e, nesta
+> máquina, o AppLocker/WDAC bloqueia a execução de
+> `@oxlint-tsgolint/win32-x64/tsgolint.exe`. O fallback usado foi
+> `npx oxlint src/ test/` + `npx tsc --noEmit`; o CI em Ubuntu executa o comando
+> completo.
 
 Comandos de verificação:
 
@@ -359,7 +492,13 @@ flowchart LR
   HC --> FAIL[Falha após 20 tentativas]
 ```
 
-Detalhes do CD:
+**CD temporariamente desativado.** Por decisão de priorizar a entrega da API, o
+deploy do ambiente demo e a escolha do banco remoto (KAN-7 e KAN-8) estão
+adiados. O `cd.yml` permanece versionado como referência, mas não há ambiente
+demo configurado. KAN-7 e KAN-8 voltam após a Sprint 3; até lá, o
+desenvolvimento usa MySQL local via Docker.
+
+Detalhes do workflow (para quando o CD for retomado):
 
 - a imagem é publicada em `ghcr.io/<owner>/<repo>/kandid-api`, com tags `sha`,
   `latest` e, em releases `v*`, a versão SemVer (`<owner>/<repo>` são as
@@ -371,15 +510,13 @@ Detalhes do CD:
 - se `RENDER_DEPLOY_HOOK_URL` ou `DEMO_URL` não estiverem configurados, o workflow
   falha explicitamente.
 
-**O demo público ainda não está configurado.** O CD está implementado, mas o
-caminho até `Demo atualizado` depende de infraestrutura manual (Render, banco e
-secrets). O banco do ambiente demo também está pendente: o
+O banco do ambiente demo também está pendente: o
 [ADR 0001](docs/adr/0001-database.md) está em `Proposed` e recomenda **TiDB Cloud
 Serverless** (compatível com MySQL), com fallback para **Neon/Postgres** se o
-spike falhar nos critérios definidos.
+spike falhar nos critérios definidos. A decisão fica para a retomada do KAN-8.
 
 Passos manuais e operação estão no
-[runbook de deploy](docs/runbook-deploy.md). Resumo:
+[runbook de deploy](docs/runbook-deploy.md). Resumo para a retomada:
 
 - [ ] Criar o repositório no GitHub e configurar o remote.
 - [ ] Proteger a `main` com PR obrigatório e checks `lint`, `build`, `test`.
@@ -421,8 +558,8 @@ atingido. O detalhamento está em [`docs/backlog.md`](docs/backlog.md).
 
 | Sprint | Foco | Status |
 |---|---|---|
-| 0 | Fundação, agentes e CI/CD | Em andamento |
-| 1 | Autenticação: registro, login e `GET /me` | Planejado |
+| 0 | Fundação, agentes e CI/CD | Concluída localmente (deploy adiado) |
+| 1 | Autenticação: registro, login e `GET /me` | Em andamento (PR pendente) |
 | 2 | Perfil: experiências, skills, formação, certificações e idiomas | Planejado |
 | 3 | Empresas, recrutadores e vagas | Planejado |
 | 4 | Candidaturas e máquina de estados | Planejado |
@@ -430,50 +567,49 @@ atingido. O detalhamento está em [`docs/backlog.md`](docs/backlog.md).
 | 6 | Export JSON/HTML, entrevistas e dashboards | Planejado |
 | 7 | Seed de demonstração, hardening e release `v1.0.0` | Planejado |
 
-## Status atual (Sprint 0)
+## Status atual (Sprint 1)
 
-**Sprint 0 — Fundação, agentes e CI/CD**, iniciada em 2026-11-05 e em andamento.
-O objetivo é o walking skeleton: repositório organizado, configuração validada,
-health check, banco versionado, CI e deploy automático no demo.
+**Sprint 1 — Autenticação**, iniciada em 2026-11-09 e em andamento (PR pendente).
+O objetivo é entregar a base de identidade da API: cadastro, login com JWT e
+consulta do usuário autenticado.
 
-Concluído:
+Entregue:
 
-- monorepo com `kandid_api/`, `docs/`, `.github/` e `.opencode/`;
-- 8 agentes e 6 comandos configurados;
-- configuração de ambiente validada, TypeORM com `synchronize: false` e CLI de
-  migration funcional;
-- Swagger em `/docs`, validação global e filtro de erros;
-- `GET /v1` e `GET /v1/health` locais;
-- workflows de CI, CD e CodeQL criados;
-- ADR 0001 registrado como `Proposed`;
-- README de portfólio (este documento).
+- tabela `users` criada pela migration `1794182400000-CreateUsers`;
+- `POST /v1/auth/register`, `POST /v1/auth/login` e `GET /v1/auth/me`;
+- Argon2id com parâmetros fixos (m=19456, t=2, p=1) e e-mail normalizado;
+- JWT HS256 com expiração de 1h e `JwtAuthGuard` próprio, sem passport;
+- respostas de usuário sem `password_hash` e erros no formato padrão;
+- testes unitários e e2e de autenticação;
+- Swagger, README e backlog atualizados;
+- fundação da Sprint 0 preservada (health, Swagger, CI e migrations).
 
-Validação local registrada em 2026-11-05:
+A Sprint 0 está concluída localmente; o deploy do demo foi adiado.
+
+Validação local registrada em 2026-11-09:
 
 | Verificação | Resultado |
 |---|---|
-| `npm run lint` | Verde, sem warnings |
 | `npm run build` | Verde |
-| `npm test` | 4 arquivos, 14 testes |
-| `npm run test:e2e` | 1 arquivo, 3 testes |
-| `npm run migration:run` | Conecta ao MySQL e registra a tabela `migrations` |
-| `GET /v1` | 200 com metadados |
-| `GET /v1/health` | 200 com `database: up` |
-| `GET /docs` | 200 com Swagger UI |
-| `docker build` + execução | imagem conecta ao MySQL e responde `/v1/health` com `database: up` |
+| `npm test` | 8 arquivos, 50 testes |
+| `npm run test:e2e` | 2 arquivos, 28 testes, com MySQL local via Docker e migration aplicada |
+| `npx oxlint src/ test/` | Verde (fallback) |
+| `npx tsc --noEmit` | Verde |
+| `npm run lint` | Bloqueado nesta máquina por AppLocker/WDAC em `tsgolint.exe`; o CI em Ubuntu executa o comando completo |
+| `npm run migration:run` | Aplica `1794182400000-CreateUsers` |
+| Smoke test | `/v1/health` 200 com `database: up`, `/docs` 200, register/login/me funcionando e `/me` sem token 401 |
 
 Pendências:
 
-- **CI em PR:** workflows criados, mas ainda não executaram em um PR real porque o
-  repositório remoto não foi configurado.
-- **CD e demo:** KAN-7 bloqueado por infraestrutura manual (Render, banco,
-  secrets). Não há URL pública.
-- **Banco do demo:** KAN-8 bloqueado por conta externa; decisão do ADR 0001
-  pendente do spike.
-- **Primeira migration de domínio:** nasce na Sprint 1, junto com as entidades de
-  autenticação e perfil.
-- **Tarefas humanas do Sprint 0:** repositório remoto, proteção da `main`,
-  environment `demo`, serviço no Render, banco, secrets e health check.
+- **Lint completo local:** `npm run lint` type-aware bloqueado pelo ambiente
+  Windows; validado por fallback (`npx oxlint` + `npx tsc --noEmit`).
+- **PR e CI:** KAN-10, KAN-11 e KAN-12 estão implementadas, mas o PR e a execução
+  do CI ainda dependem do repositório remoto.
+- **Revisão humana:** aprovação final do PR pendente.
+- **Deploy e banco remoto:** KAN-7 e KAN-8 adiados conscientemente para priorizar
+  a API; retomam após a Sprint 3.
+- **Proteção de branch:** configuração da `main` com PR obrigatório e checks
+  pendente de configuração humana no GitHub.
 
 ## Documentação
 
@@ -482,6 +618,8 @@ Pendências:
 - [`docs/workflow.md`](docs/workflow.md) — time, ciclo de sprint e portões humanos.
 - [`docs/sprints/sprint-00.md`](docs/sprints/sprint-00.md) — escopo e validação da
   Sprint 0.
+- [`docs/sprints/sprint-01.md`](docs/sprints/sprint-01.md) — escopo, contratos e
+  validação da Sprint 1.
 - [`docs/adr/0001-database.md`](docs/adr/0001-database.md) — decisão de banco do
   ambiente demo.
 - [`docs/runbook-deploy.md`](docs/runbook-deploy.md) — deploy, migrations e

@@ -2,12 +2,14 @@
 
 Status: `Planejado` | `Em andamento` | `Concluído` | `Bloqueado`
 
+> Decisão API-first (2026-11-09): o desenvolvimento segue com MySQL local via Docker; deploy (KAN-7) e banco remoto (KAN-8) foram adiados conscientemente e retomam após a Sprint 3.
+
 ## Épicos
 
 | ID | Épico | Sprint | Status |
 |---|---|---|---|
-| E0 | Fundação, agentes e CI/CD | 0 | Em andamento |
-| E1 | Autenticação e perfil | 1–2 | Planejado |
+| E0 | Fundação, agentes e CI/CD | 0 | Concluído localmente (deploy adiado) |
+| E1 | Autenticação e perfil | 1–2 | Em andamento |
 | E2 | Empresas, recrutadores e vagas | 3 | Planejado |
 | E3 | Candidaturas e máquina de estados | 4 | Planejado |
 | E4 | Currículos e motor ATS | 5 | Planejado |
@@ -26,16 +28,16 @@ Status: `Planejado` | `Em andamento` | `Concluído` | `Bloqueado`
 | KAN-4 | Adicionar Swagger, validação global e filtro de erros | Concluído |
 | KAN-5 | Criar `GET /v1/health` | Concluído |
 | KAN-6 | CI com lint, build, testes e MySQL | Concluído (aguardando 1º PR) |
-| KAN-7 | CD para o ambiente demo | Bloqueado (infra manual) |
-| KAN-8 | Spike e ADR de banco de dados | Bloqueado (conta externa) |
+| KAN-7 | CD para o ambiente demo | Adiado (retoma após Sprint 3) |
+| KAN-8 | Spike e ADR de banco de dados | Adiado (retoma após Sprint 3) |
 
 ### E1 — Autenticação e perfil
 
 | ID | História | Sprint | Status |
 |---|---|---|---|
-| KAN-10 | Registrar usuário | 1 | Planejado |
-| KAN-11 | Autenticar com JWT | 1 | Planejado |
-| KAN-12 | Consultar usuário autenticado | 1 | Planejado |
+| KAN-10 | Registrar usuário | 1 | Em andamento (PR pendente) |
+| KAN-11 | Autenticar com JWT | 1 | Em andamento (PR pendente) |
+| KAN-12 | Consultar usuário autenticado | 1 | Em andamento (PR pendente) |
 | KAN-13 | Criar e atualizar perfil | 2 | Planejado |
 | KAN-14 | CRUD de experiências e bullets | 2 | Planejado |
 | KAN-15 | Catálogo e vínculo de skills | 2 | Planejado |
