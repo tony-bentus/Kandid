@@ -40,6 +40,7 @@ const options: DataSourceOptions = {
   synchronize: false,
   logging: process.env.DB_LOGGING === 'true',
   timezone: 'Z',
+  extra: { dateStrings: ['DATE'] },
 };
 
 const AppDataSource = new DataSource(options);

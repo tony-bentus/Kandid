@@ -8,6 +8,12 @@ import configuration from './config/configuration.js';
 import { validateEnv } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { CertificationsModule } from './modules/certifications/certifications.module.js';
+import { EducationsModule } from './modules/educations/educations.module.js';
+import { ExperiencesModule } from './modules/experiences/experiences.module.js';
+import { LanguagesModule } from './modules/languages/languages.module.js';
+import { ProfilesModule } from './modules/profiles/profiles.module.js';
+import { SkillsModule } from './modules/skills/skills.module.js';
 
 @Module({
   imports: [
@@ -31,6 +37,10 @@ import { AuthModule } from './modules/auth/auth.module.js';
           retryAttempts: 3,
           retryDelay: 3000,
           timezone: 'Z',
+          // `mysql2` devolve DATE como Date em UTC; o TypeORM reformata em TZ local
+          // e desloca o dia em fusos negativos. Manter DATE como string preserva
+          // o contrato YYYY-MM-DD sem alterar DATETIME (createdAt/updatedAt).
+          extra: { dateStrings: ['DATE'] },
           ssl,
         };
         const url = config.get<string>('database.url');
@@ -52,6 +62,12 @@ import { AuthModule } from './modules/auth/auth.module.js';
     }),
     HealthModule,
     AuthModule,
+    ProfilesModule,
+    ExperiencesModule,
+    SkillsModule,
+    EducationsModule,
+    CertificationsModule,
+    LanguagesModule,
   ],
   controllers: [AppController],
   providers: [
