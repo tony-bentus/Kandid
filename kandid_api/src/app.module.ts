@@ -9,10 +9,13 @@ import { validateEnv } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CertificationsModule } from './modules/certifications/certifications.module.js';
+import { CompaniesModule } from './modules/companies/companies.module.js';
 import { EducationsModule } from './modules/educations/educations.module.js';
 import { ExperiencesModule } from './modules/experiences/experiences.module.js';
+import { JobsModule } from './modules/jobs/jobs.module.js';
 import { LanguagesModule } from './modules/languages/languages.module.js';
 import { ProfilesModule } from './modules/profiles/profiles.module.js';
+import { RecruitersModule } from './modules/recruiters/recruiters.module.js';
 import { SkillsModule } from './modules/skills/skills.module.js';
 
 @Module({
@@ -62,8 +65,11 @@ import { SkillsModule } from './modules/skills/skills.module.js';
     }),
     HealthModule,
     AuthModule,
+    CompaniesModule,
     ProfilesModule,
     ExperiencesModule,
+    RecruitersModule,
+    JobsModule,
     SkillsModule,
     EducationsModule,
     CertificationsModule,
