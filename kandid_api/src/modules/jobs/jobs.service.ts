@@ -16,6 +16,7 @@ import {
   assertNoForcedNull,
   hasField,
 } from '../../common/utils/null-fields.js';
+import { Application } from '../applications/entities/application.entity.js';
 import { SkillResponseDto } from '../skills/dto/skill-response.dto.js';
 import { Skill } from '../skills/entities/skill.entity.js';
 import { Company } from '../companies/entities/company.entity.js';
@@ -33,8 +34,8 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 
 /**
- * Campos que nunca aceitam `null` explÃ­cito. `skills` entra na lista porque
- * `null` nÃ£o Ã© array: use `[]` para limpar a stack.
+ * Campos que nunca aceitam `null` explícito. `skills` entra na lista porque
+ * `null` não é array: use `[]` para limpar a stack.
  */
 const REQUIRED_FIELDS = [
   'companyId',
@@ -52,7 +53,7 @@ interface NormalizedJobSkill {
   isRequired: boolean;
 }
 
-/** String vazia (ou sÃ³ espaÃ§os) e `null` limpam a coluna opcional. */
+/** String vazia (ou só espaços) e `null` limpam a coluna opcional. */
 function normalizeOptionalString(
   value: string | null | undefined,
 ): string | null {
@@ -66,8 +67,8 @@ function normalizeOptionalString(
 }
 
 /**
- * Vagas do usuÃ¡rio autenticado. Todo acesso Ã© escopado pelo `userId` do JWT:
- * recurso alheio ou inexistente responde 404; em filtro de coleÃ§Ã£o,
+ * Vagas do usuário autenticado. Todo acesso é escopado pelo `userId` do JWT:
+ * recurso alheio ou inexistente responde 404; em filtro de coleção,
  * `companyId` alheio apenas estreita o resultado (envelope vazio).
  */
 @Injectable()
@@ -83,10 +84,12 @@ export class JobsService {
     private readonly recruitersRepository: Repository<Recruiter>,
     @InjectRepository(Skill)
     private readonly skillsRepository: Repository<Skill>,
+    @InjectRepository(Application)
+    private readonly applicationsRepository: Repository<Application>,
     private readonly dataSource: DataSource,
   ) {}
 
-  /** POST /v1/jobs â€” cria a vaga e a stack no mesmo bloco transacional. */
+  /** POST /v1/jobs — cria a vaga e a stack no mesmo bloco transacional. */
   async create(userId: string, dto: CreateJobDto): Promise<JobResponseDto> {
     assertNoForcedNull(dto, REQUIRED_FIELDS);
 
@@ -136,7 +139,7 @@ export class JobsService {
     });
   }
 
-  /** GET /v1/jobs â€” filtros em AND, ordenaÃ§Ã£o fixa e envelope paginado. */
+  /** GET /v1/jobs — filtros em AND, ordenação fixa e envelope paginado. */
   async findAll(
     userId: string,
     query: ListJobsQueryDto,
@@ -148,8 +151,8 @@ export class JobsService {
       .createQueryBuilder('job')
       .where('job.userId = :userId', { userId });
 
-    // NÃ£o hÃ¡ checagem de posse aqui: um companyId alheio simplesmente nÃ£o
-    // corresponde a nenhuma vaga deste usuÃ¡rio (envelope vazio, sem 404).
+    // Não há checagem de posse aqui: um companyId alheio simplesmente não
+    // corresponde a nenhuma vaga deste usuário (envelope vazio, sem 404).
     if (query.companyId != null) {
       qb.andWhere('job.companyId = :companyId', { companyId: query.companyId });
     }
@@ -217,9 +220,9 @@ export class JobsService {
   }
 
   /**
-   * PATCH /v1/jobs/:id â€” a vaga Ã© resolvida antes de qualquer validaÃ§Ã£o 400.
-   * Com `skills` presente, stack Ã© substituÃ­da por completo sob
-   * `pessimistic_write` na linha da vaga (delete + insert atÃ´micos).
+   * PATCH /v1/jobs/:id — a vaga é resolvida antes de qualquer validação 400.
+   * Com `skills` presente, stack é substituída por completo sob
+   * `pessimistic_write` na linha da vaga (delete + insert atômicos).
    */
   async update(
     userId: string,
@@ -267,9 +270,13 @@ export class JobsService {
     });
   }
 
-  /** DELETE /v1/jobs/:id â€” job_skills Ã© removida por cascata no banco. */
+  /** DELETE /v1/jobs/:id — job_skills é removida por cascata no banco. */
   async remove(userId: string, id: string): Promise<void> {
     const job = await this.requireJob(userId, id);
+
+    if ((await this.applicationsRepository.countBy({ jobId: id })) > 0) {
+      throw new ConflictException('Cannot delete job with applications');
+    }
 
     await this.jobsRepository.remove(job);
   }
@@ -375,7 +382,7 @@ export class JobsService {
 
     try {
       // Apenas este bloco traduz ER_DUP_ENTRY de PRIMARY: um PRIMARY de
-      // outra tabela nÃ£o deve ser confundido com duplicata de job_skills.
+      // outra tabela não deve ser confundido com duplicata de job_skills.
       await repository.save(links);
     } catch (error) {
       if (isDuplicateEntry(error, 'PRIMARY')) {
@@ -534,7 +541,7 @@ export class JobsService {
     }
   }
 
-  /** `LIKE` com `ESCAPE '\'`: literal `%`, `_` e `\` nÃ£o viram curingas. */
+  /** `LIKE` com `ESCAPE '\'`: literal `%`, `_` e `\` não viram curingas. */
   private escapeLike(value: string): string {
     return value.replace(/[\\%_]/g, '\\$&');
   }

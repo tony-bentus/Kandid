@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { Application } from '../applications/entities/application.entity.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { Company } from '../companies/entities/company.entity.js';
 import { Recruiter } from '../recruiters/entities/recruiter.entity.js';
@@ -17,6 +18,7 @@ import { JobSkill } from './entities/job-skill.entity.js';
       Company,
       Recruiter,
       Skill,
+      Application,
     ]),
     AuthModule,
   ],

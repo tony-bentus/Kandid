@@ -4,6 +4,7 @@ import { APP_FILTER } from '@nestjs/core';
 import { TypeOrmModule, type TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AppController } from './app.controller.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { ApplicationsModule } from './modules/applications/applications.module.js';
 import configuration from './config/configuration.js';
 import { validateEnv } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
@@ -70,6 +71,7 @@ import { SkillsModule } from './modules/skills/skills.module.js';
     ExperiencesModule,
     RecruitersModule,
     JobsModule,
+    ApplicationsModule,
     SkillsModule,
     EducationsModule,
     CertificationsModule,

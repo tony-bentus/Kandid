@@ -5,7 +5,7 @@
 ![NestJS](https://img.shields.io/badge/NestJS-12-E0234E)
 ![Node.js](https://img.shields.io/badge/Node.js-24-339933)
 ![MySQL](https://img.shields.io/badge/MySQL-8.4-4479A1)
-![Status](https://img.shields.io/badge/status-Sprint_1-yellow)
+![Status](https://img.shields.io/badge/status-Sprint_4-blue)
 
 ## Visão geral
 
@@ -26,12 +26,20 @@ O Kandid propõe centralizar esse fluxo em uma única API:
 É um projeto **pessoal, de estudo e portfólio**, sem objetivo comercial. A
 especificação completa do domínio está em [`docs/prompt-kandid.md`](docs/prompt-kandid.md).
 
-> **Estado atual:** o projeto está na Sprint 1 (autenticação). Já existem a
-> aplicação NestJS, a conexão com MySQL, o health check, o Swagger e as rotas de
-> registro, login e usuário autenticado. Os demais domínios (perfil, vagas,
-> candidaturas, currículos e ATS) ainda não foram implementados. O deploy do
-> ambiente demo foi conscientemente adiado para priorizar a API; consulte
-> [Status atual](#status-atual-sprint-1) e [Roadmap](#roadmap-por-sprints).
+> **Estado atual:** a Sprint 1 (autenticação) está concluída, com PR pendente. A
+> Sprint 2 (perfil profissional) foi implementada e validada localmente na branch
+> `feat/sprint-2-profile` (HEAD `00b0647`): perfil, experiências com bullets,
+> skills, formação, certificações e idiomas estão funcionais, sem HTTP 501 nas
+> rotas do domínio. A Sprint 3 (pipeline) também foi implementada localmente nessa
+> mesma branch: empresas, recrutadores e vagas com stack, senioridade, faixa
+> salarial, filtros e paginação. A Sprint 4 (candidaturas) também foi
+> implementada localmente nessa mesma branch: máquina de estados, histórico,
+> compensação, filtros e paginação. Commit e push dependem de aprovação humana;
+> PR, revisão, CI, testes e demo manual das Sprints 3 e 4 também estão pendentes.
+> Currículos e ATS ainda não foram implementados. Os workflows de
+> CD e Dependabot seguem ativos e sem alteração, com a decisão sobre o ambiente
+> demo registrada como pendência. Consulte [Status atual](#status-atual) e
+> [Roadmap](#roadmap-por-sprints).
 
 ## Escopo do MVP
 
@@ -99,21 +107,55 @@ Decisões que moldam o código:
 
 ## Arquitetura
 
-Monólito modular em NestJS. Hoje a aplicação tem a fundação e a autenticação:
+Monólito modular em NestJS. Hoje a aplicação tem a fundação, a autenticação e os
+domínios de perfil, pipeline e candidaturas implementados localmente:
 
 - `main.ts` configura o prefixo `/v1`, o `ValidationPipe`, CORS, o Swagger e a
   porta;
-- `app.module.ts` carrega configuração validada, TypeORM, health, users e auth;
+- `app.module.ts` carrega configuração validada, TypeORM, health, users, auth,
+  perfil, pipeline (companies, recruiters e jobs) e candidaturas (applications);
 - `database/data-source.ts` é o `DataSource` usado pelo CLI do TypeORM, com
   entidades e migrations carregadas por glob;
 - `database/migrations/1794182400000-CreateUsers.ts` cria a tabela `users`;
+- `database/migrations/1794268800000-CreateProfileDomain.ts` cria as tabelas do
+  domínio de perfil (`profiles`, `experiences`, `experience_bullets`, `skills`,
+  `profile_skills`, `educations`, `certifications` e `languages`);
+- `database/migrations/1794960000000-CreatePipelineDomain.ts` cria `companies`,
+  `recruiters`, `jobs` e `job_skills`, com `jobs.company_id` em `RESTRICT`;
+- `database/migrations/1795046400000-CreateApplicationsDomain.ts` cria
+  `applications` e `application_status_history` (tabela no singular);
 - `health` executa `SELECT 1` para reportar o estado do banco;
 - `modules/users` contém a entidade `User` (tabela `users`) e o `UsersService`;
 - `modules/auth` contém `AuthController`, `AuthService`, DTOs e a emissão de JWT;
+- `modules/profiles` contém o perfil 1:1 do usuário (`profiles`);
+- `modules/experiences` contém experiências e bullets aninhadas
+  (`experiences` e `experience_bullets`);
+- `modules/skills` contém o catálogo global (`skills`), os vínculos do perfil
+  (`profile_skills`) e os controllers `SkillsController` e
+  `ProfileSkillsController`;
+- `modules/educations`, `modules/certifications` e `modules/languages` cobrem as
+  demais seções do perfil;
+- `modules/companies`, `modules/recruiters` e `modules/jobs` implementam o
+  pipeline da Sprint 3, com stack em `job_skills` e faixa salarial em centavos;
+- `modules/applications` implementa a máquina de estados (`ApplicationStatus` e
+  `APPLICATION_TRANSITIONS`), o histórico append-only, a compensação e os filtros
+  da Sprint 4, com serviço transacional;
+- os controllers do domínio estão roteados, com guard JWT e Swagger; os services
+  implementam as regras de negócio das Sprints 2, 3 e 4, sem
+  `NotImplementedException` (HTTP 501) nas rotas de perfil, pipeline e
+  candidaturas;
+- `common/utils` concentra os helpers puros de conversão e normalização; o PATCH
+  usa `hasField` para distinguir campo ausente de `null`, e a leitura de `DATE`
+  usa `extra: { dateStrings: ['DATE'] }` em `app.module.ts` e `data-source.ts`
+  (decisões em [`ADR 0002`](docs/adr/0002-sprint-2-profile.md)); o pipeline e a
+  resolução de conflitos de contrato estão em
+  [`ADR 0003`](docs/adr/0003-sprint-3-pipeline.md); as candidaturas estão em
+  [`ADR 0004`](docs/adr/0004-sprint-4-applications.md);
 - `common/filters` concentra o filtro global de erros;
 - `common/guards` tem o `JwtAuthGuard`, implementado sem passport;
 - `common/decorators` tem o `@CurrentUser()`;
 - `common/interfaces` define o usuário autenticado;
+- `common/validators` tem o `IsDateOnly`, que exige datas estritas `YYYY-MM-DD`;
 - `common/utils` concentra a normalização de e-mail.
 
 Novos módulos seguem o padrão `dto/`, `entities/`, `*.module.ts`,
@@ -134,10 +176,12 @@ Kandid/
 │   └── commands/                # /sprint-plan, /feature, /test, /review, /release, /retro
 ├── docs/
 │   ├── adr/
-│   │   └── 0001-database.md
+│   │   ├── 0001-database.md
+│   │   └── 0002-sprint-2-profile.md
 │   ├── sprints/
 │   │   ├── sprint-00.md
-│   │   └── sprint-01.md
+│   │   ├── sprint-01.md
+│   │   └── sprint-02.md
 │   ├── backlog.md
 │   ├── prompt-kandid.md         # spec e fonte da verdade do domínio
 │   ├── runbook-deploy.md
@@ -146,15 +190,21 @@ Kandid/
 │   ├── src/
 │   │   ├── common/
 │   │   │   ├── decorators/
+│   │   │   ├── enums/              # enums do domínio (seniority, skill, etc.)
 │   │   │   ├── filters/
 │   │   │   ├── guards/
 │   │   │   ├── interfaces/
-│   │   │   └── utils/
+│   │   │   ├── utils/
+│   │   │   └── validators/         # IsDateOnly (YYYY-MM-DD)
 │   │   ├── config/
 │   │   ├── database/
 │   │   │   ├── data-source.ts
-│   │   │   └── migrations/
-│   │   │       └── 1794182400000-CreateUsers.ts
+│   │   │   ├── migrations/
+│   │   │   └── seeds/              # seed do catálogo de skills (npm run seed:skills)
+│   │   │       ├── 1794182400000-CreateUsers.ts
+│   │   │       ├── 1794268800000-CreateProfileDomain.ts
+│   │   │       ├── 1794960000000-CreatePipelineDomain.ts
+│   │   │       └── 1795046400000-CreateApplicationsDomain.ts
 │   │   ├── health/
 │   │   ├── modules/
 │   │   │   ├── auth/
@@ -162,6 +212,12 @@ Kandid/
 │   │   │   │   ├── auth.controller.ts
 │   │   │   │   ├── auth.module.ts
 │   │   │   │   └── auth.service.ts
+│   │   │   ├── profiles/            # perfil 1:1 (implementado)
+│   │   │   ├── experiences/         # experiências e bullets aninhadas (implementado)
+│   │   │   ├── skills/              # catálogo + skills do perfil (implementado)
+│   │   │   ├── educations/          # implementado
+│   │   │   ├── certifications/      # implementado
+│   │   │   ├── languages/           # implementado
 │   │   │   └── users/
 │   │   │       ├── entities/
 │   │   │       ├── users.module.ts
@@ -183,8 +239,10 @@ Kandid/
 ### Modelo de domínio alvo
 
 Visão simplificada do modelo definido na spec. A entidade `USER` já existe na
-tabela `users`; `PROFILE` e as demais entidades ainda serão implementadas nas
-próximas sprints.
+tabela `users`, e o primeiro bloco do domínio (`PROFILE`, `EXPERIENCE`,
+`EXPERIENCE_BULLET`, `SKILL`, `PROFILE_SKILL`, `EDUCATION`, `CERTIFICATION` e
+`LANGUAGE`) tem entidades, tabelas e regras de negócio entregues pela Sprint 2.
+Os demais domínios vêm nas próximas sprints.
 
 ```mermaid
 erDiagram
@@ -222,6 +280,7 @@ cp .env.example .env
 # edite .env e troque JWT_SECRET por um valor aleatório com 16+ caracteres
 npm ci
 npm run migration:run
+npm run seed:skills   # opcional: catálogo de skills; veja a ressalva abaixo
 npm run start:dev
 ```
 
@@ -234,8 +293,18 @@ Copy-Item .env.example .env
 O `docker-compose.yml` sobe MySQL 8.4 em `localhost:3306`, com banco `kandid` e
 usuário/senha `kandid`. Essas credenciais são apenas para desenvolvimento local.
 
-O `npm run migration:run` aplica a migration `1794182400000-CreateUsers`, que
-cria a tabela `users`. O TypeORM também mantém a tabela de controle `migrations`.
+O `npm run migration:run` aplica as migrations versionadas:
+`1794182400000-CreateUsers`, `1794268800000-CreateProfileDomain`,
+`1794960000000-CreatePipelineDomain` e
+`1795046400000-CreateApplicationsDomain`. O TypeORM também mantém a tabela de
+controle `migrations`; `synchronize` continua desativado. O `schema:log` via CLI
+direto (`npm run typeorm -- schema:log -d src/database/data-source.ts`) ficou sem
+drift após a migration de candidaturas.
+
+O `npm run seed:skills` semeia o catálogo somente leitura com **118 skills e 84
+aliases**. É uma execução local e explícita (não roda no bootstrap nem em
+migration) e é idempotente por `slug`. O e2e chama o seed diretamente e não deve
+apagar a tabela `skills`.
 
 URLs locais:
 
@@ -254,17 +323,69 @@ docker compose down
 
 ## Endpoints disponíveis
 
-Esta tabela reflete o estado atual do código. As rotas de autenticação estão
-implementadas; os demais domínios ainda não.
+Esta tabela reflete o estado atual do código. As rotas de autenticação, perfil,
+pipeline e candidaturas estão implementadas e protegidas por JWT (exceto as rotas
+públicas indicadas).
 
-| Método | Rota | Autenticação | Descrição |
-|---|---|---|---|
-| `GET` | `/v1` | Pública | Metadados: nome, versão e links de documentação e health |
-| `GET` | `/v1/health` | Pública | Status da aplicação, versão, uptime e conexão com o banco |
-| `POST` | `/v1/auth/register` | Pública | Cria a conta e devolve `{ user, accessToken }` |
-| `POST` | `/v1/auth/login` | Pública | Autentica com e-mail e senha e devolve `{ user, accessToken }` |
-| `GET` | `/v1/auth/me` | Bearer JWT | Devolve o usuário autenticado pelo token |
-| `GET` | `/docs` | Pública | Swagger UI (não faz parte do prefixo `/v1`) |
+| Método | Rota | Autenticação | Descrição | Situação |
+|---|---|---|---|---|
+| `GET` | `/v1` | Pública | Metadados: nome, versão e links de documentação e health | Implementada |
+| `GET` | `/v1/health` | Pública | Status da aplicação, versão, uptime e conexão com o banco | Implementada |
+| `POST` | `/v1/auth/register` | Pública | Cria a conta e devolve `{ user, accessToken }` | Implementada |
+| `POST` | `/v1/auth/login` | Pública | Autentica com e-mail e senha e devolve `{ user, accessToken }` | Implementada |
+| `GET` | `/v1/auth/me` | Bearer JWT | Devolve o usuário autenticado pelo token | Implementada |
+| `GET` | `/v1/me/profile` | Bearer JWT | Retorna o perfil do usuário autenticado | Implementada |
+| `PATCH` | `/v1/me/profile` | Bearer JWT | Cria ou atualiza parcialmente o perfil | Implementada |
+| `POST` | `/v1/me/experiences` | Bearer JWT | Cria uma experiência profissional | Implementada |
+| `GET` | `/v1/me/experiences` | Bearer JWT | Lista as experiências do usuário | Implementada |
+| `GET` | `/v1/me/experiences/:id` | Bearer JWT | Retorna uma experiência | Implementada |
+| `PATCH` | `/v1/me/experiences/:id` | Bearer JWT | Atualiza parcialmente uma experiência | Implementada |
+| `DELETE` | `/v1/me/experiences/:id` | Bearer JWT | Remove a experiência e suas bullets | Implementada |
+| `POST` | `/v1/me/experiences/:id/bullets` | Bearer JWT | Adiciona uma bullet à experiência | Implementada |
+| `PATCH` | `/v1/me/experiences/:id/bullets/:bulletId` | Bearer JWT | Atualiza parcialmente uma bullet | Implementada |
+| `DELETE` | `/v1/me/experiences/:id/bullets/:bulletId` | Bearer JWT | Remove uma bullet | Implementada |
+| `GET` | `/v1/skills` | Bearer JWT | Busca skills do catálogo por nome ou alias | Implementada |
+| `GET` | `/v1/me/skills` | Bearer JWT | Lista as skills do perfil | Implementada |
+| `POST` | `/v1/me/skills` | Bearer JWT | Vincula uma skill do catálogo ao perfil | Implementada |
+| `PATCH` | `/v1/me/skills/:id` | Bearer JWT | Atualiza o vínculo de uma skill | Implementada |
+| `DELETE` | `/v1/me/skills/:id` | Bearer JWT | Remove o vínculo de uma skill | Implementada |
+| `POST` | `/v1/me/educations` | Bearer JWT | Cria uma formação acadêmica | Implementada |
+| `GET` | `/v1/me/educations` | Bearer JWT | Lista as formações do usuário | Implementada |
+| `GET` | `/v1/me/educations/:id` | Bearer JWT | Retorna uma formação | Implementada |
+| `PATCH` | `/v1/me/educations/:id` | Bearer JWT | Atualiza parcialmente uma formação | Implementada |
+| `DELETE` | `/v1/me/educations/:id` | Bearer JWT | Remove uma formação | Implementada |
+| `POST` | `/v1/me/certifications` | Bearer JWT | Cria uma certificação | Implementada |
+| `GET` | `/v1/me/certifications` | Bearer JWT | Lista as certificações do usuário | Implementada |
+| `GET` | `/v1/me/certifications/:id` | Bearer JWT | Retorna uma certificação | Implementada |
+| `PATCH` | `/v1/me/certifications/:id` | Bearer JWT | Atualiza parcialmente uma certificação | Implementada |
+| `DELETE` | `/v1/me/certifications/:id` | Bearer JWT | Remove uma certificação | Implementada |
+| `POST` | `/v1/me/languages` | Bearer JWT | Cria um idioma no perfil | Implementada |
+| `GET` | `/v1/me/languages` | Bearer JWT | Lista os idiomas do usuário | Implementada |
+| `GET` | `/v1/me/languages/:id` | Bearer JWT | Retorna um idioma | Implementada |
+| `PATCH` | `/v1/me/languages/:id` | Bearer JWT | Atualiza parcialmente um idioma | Implementada |
+| `DELETE` | `/v1/me/languages/:id` | Bearer JWT | Remove um idioma | Implementada |
+| `POST` | `/v1/companies` | Bearer JWT | Cria uma empresa (`unique` por usuário) | Implementada |
+| `GET` | `/v1/companies` | Bearer JWT | Lista empresas, com filtro opcional `kind` | Implementada |
+| `GET` | `/v1/companies/:id` | Bearer JWT | Retorna uma empresa | Implementada |
+| `PATCH` | `/v1/companies/:id` | Bearer JWT | Atualiza parcialmente uma empresa | Implementada |
+| `DELETE` | `/v1/companies/:id` | Bearer JWT | Remove empresa; 409 se houver vagas | Implementada |
+| `POST` | `/v1/recruiters` | Bearer JWT | Cria um recrutador, com agência opcional | Implementada |
+| `GET` | `/v1/recruiters` | Bearer JWT | Lista os recrutadores do usuário | Implementada |
+| `GET` | `/v1/recruiters/:id` | Bearer JWT | Retorna um recrutador | Implementada |
+| `PATCH` | `/v1/recruiters/:id` | Bearer JWT | Atualiza parcialmente um recrutador | Implementada |
+| `DELETE` | `/v1/recruiters/:id` | Bearer JWT | Remove um recrutador | Implementada |
+| `POST` | `/v1/jobs` | Bearer JWT | Cria vaga com stack e faixa salarial | Implementada |
+| `GET` | `/v1/jobs` | Bearer JWT | Lista vagas com `companyId`, `seniority`, `skillId`, `q`, `page` e `limit` | Implementada |
+| `GET` | `/v1/jobs/:id` | Bearer JWT | Retorna uma vaga com a stack aninhada | Implementada |
+| `PATCH` | `/v1/jobs/:id` | Bearer JWT | Atualiza vaga; `skills` substitui a stack | Implementada |
+| `DELETE` | `/v1/jobs/:id` | Bearer JWT | Remove uma vaga; 409 se houver candidatura | Implementada |
+| `POST` | `/v1/jobs/:id/applications` | Bearer JWT | Cria uma candidatura para a vaga | Implementada |
+| `GET` | `/v1/applications` | Bearer JWT | Lista candidaturas com `status`, `companyId`, `from`, `to`, `page` e `limit` | Implementada |
+| `GET` | `/v1/applications/:id` | Bearer JWT | Retorna uma candidatura | Implementada |
+| `PATCH` | `/v1/applications/:id/status` | Bearer JWT | Transiciona o status e registra o histórico | Implementada |
+| `PATCH` | `/v1/applications/:id/compensation` | Bearer JWT | Atualiza os valores proposto e ofertado | Implementada |
+| `GET` | `/v1/applications/:id/history` | Bearer JWT | Retorna o histórico de status da candidatura | Implementada |
+| `GET` | `/docs` | Pública | Swagger UI (não faz parte do prefixo `/v1`) | Implementada |
 
 ### Exemplos com `curl`
 
@@ -401,6 +522,45 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:3000/v1/auth/l
 `GET /v1/auth/me` sem token também responde 401, com
 `Invalid or missing access token`.
 
+Perfil ainda não criado (404, sem criação por efeito colateral):
+
+```bash
+curl -s http://localhost:3000/v1/me/profile \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Profile not found",
+  "path": "/v1/me/profile",
+  "timestamp": "2026-11-18T12:00:00.000Z"
+}
+```
+
+Busca no catálogo de skills (requer `npm run seed:skills`):
+
+```bash
+curl -s "http://localhost:3000/v1/skills?q=node" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+[
+  {
+    "id": "3c4f9a9c-1e2d-4f12-8e4f-6b8e5b0f2a8e",
+    "name": "Node.js",
+    "slug": "node-js",
+    "category": "FRAMEWORK",
+    "aliases": ["Node", "NodeJS"]
+  }
+]
+```
+
+A busca normaliza `q` e ordena por correspondência exata, prefixo e depois
+“contém”; o `limit` é 20 por padrão e no máximo 50.
+
 ## Scripts npm
 
 Execute todos dentro de `kandid_api/`.
@@ -413,6 +573,7 @@ Execute todos dentro de `kandid_api/`.
 | `npm run start:debug` | Sobe em modo debug com watch |
 | `npm run start:prod` | Executa `node dist/main.js` |
 | `npm run lint` | Roda oxlint type-aware em `src/` e `test/` |
+| `npx tsc --noEmit` | Checa os tipos sem emitir arquivos |
 | `npm run format` | Formata com Prettier |
 | `npm test` | Roda os testes unitários com Vitest |
 | `npm run test:watch` | Roda testes unitários em watch |
@@ -420,6 +581,7 @@ Execute todos dentro de `kandid_api/`.
 | `npm run test:e2e` | Roda os testes e2e com Vitest e supertest |
 | `npm run migration:generate -- src/database/migrations/Nome` | Gera uma migration a partir das entidades |
 | `npm run migration:run` | Aplica as migrations pendentes |
+| `npm run seed:skills` | Semeia o catálogo de skills (local e explícito; idempotente) |
 | `npm run migration:show` | Lista migrations e status |
 | `npm run migration:revert` | Reverte a última migration (apenas local) |
 
@@ -430,30 +592,24 @@ Quando o CD for retomado, o deploy do ambiente demo será feito pelo workflow
 
 Os testes usam Vitest com globals e supertest:
 
-| Suíte | Arquivo | Testes atuais |
+| Suíte | Arquivos | Testes |
 |---|---|---|
-| Unitário — metadados | `src/app.controller.spec.ts` | 1 |
-| Unitário — health | `src/health/health.controller.spec.ts` | 2 |
-| Unitário — validação de env | `src/config/env.validation.spec.ts` | 8 |
-| Unitário — filtro de erros | `src/common/filters/all-exceptions.filter.spec.ts` | 3 |
-| Unitário — auth service | `src/modules/auth/auth.service.spec.ts` | 8 |
-| Unitário — users service | `src/modules/users/users.service.spec.ts` | 4 |
-| Unitário — guard JWT | `src/common/guards/jwt-auth.guard.spec.ts` | 11 |
-| Unitário — DTOs de auth | `src/modules/auth/dto/auth.dto.spec.ts` | 13 |
-| **Total unitário** | **8 arquivos** | **50** |
-| E2E — auth | `test/auth.e2e-spec.ts` | 25 |
-| E2E — API, health e erro | `test/app.e2e-spec.ts` | 3 |
-| **Total e2e** | **2 arquivos** | **28** |
+| Unitário — Sprint 1 (metadados, health, env, filtro, auth, users, guard e DTOs) | 8 | 50 |
+| Unitário — Sprint 2 (profiles, experiences, skills, educations, certifications, languages, utils e seed) | 13 | 182 |
+| **Total unitário** | **21 arquivos** | **232** |
+| E2E — Sprint 1 (auth, API, health e erro) | 2 | 28 |
+| E2E — Sprint 2 (domínio de perfil: KAN-13 a KAN-16, com dois usuários e ownership) | 4 | 164 |
+| **Total e2e** | **6 arquivos** | **192** |
 
 Os testes unitários cobrem os arquivos `*.spec.ts`. Os testes e2e usam
 `*.e2e-spec.ts` e exigem um MySQL acessível: Docker Compose local ou o service
-container do CI.
+container do CI. O e2e da Sprint 2 chama o seed do catálogo diretamente e não
+apaga a tabela `skills`.
 
-> **Limitação no Windows:** `npm run lint` usa `oxlint --type-aware` e, nesta
-> máquina, o AppLocker/WDAC bloqueia a execução de
-> `@oxlint-tsgolint/win32-x64/tsgolint.exe`. O fallback usado foi
-> `npx oxlint src/ test/` + `npx tsc --noEmit`; o CI em Ubuntu executa o comando
-> completo.
+> **Ambiente Windows:** `npm run lint` (oxlint type-aware) executa com exit 0
+> nesta máquina, com 1 warning preexistente em `test/auth.e2e-spec.ts:232`. O
+> fallback `npx oxlint src/ test/` + `npx tsc --noEmit` também está verde; o CI
+> em Ubuntu executa o comando completo.
 
 Comandos de verificação:
 
@@ -495,7 +651,7 @@ flowchart LR
 **CD temporariamente desativado.** Por decisão de priorizar a entrega da API, o
 deploy do ambiente demo e a escolha do banco remoto (KAN-7 e KAN-8) estão
 adiados. O `cd.yml` permanece versionado como referência, mas não há ambiente
-demo configurado. KAN-7 e KAN-8 voltam após a Sprint 3; até lá, o
+demo configurado. KAN-7 e KAN-8 voltam após o fechamento local da Sprint 4; até lá, o
 desenvolvimento usa MySQL local via Docker.
 
 Detalhes do workflow (para quando o CD for retomado):
@@ -559,17 +715,17 @@ atingido. O detalhamento está em [`docs/backlog.md`](docs/backlog.md).
 | Sprint | Foco | Status |
 |---|---|---|
 | 0 | Fundação, agentes e CI/CD | Concluída localmente (deploy adiado) |
-| 1 | Autenticação: registro, login e `GET /me` | Em andamento (PR pendente) |
-| 2 | Perfil: experiências, skills, formação, certificações e idiomas | Planejado |
-| 3 | Empresas, recrutadores e vagas | Planejado |
-| 4 | Candidaturas e máquina de estados | Planejado |
+| 1 | Autenticação: registro, login e `GET /me` | Concluída (PR pendente) |
+| 2 | Perfil: experiências, skills, formação, certificações e idiomas | Concluída e validada localmente (commit/push pendentes) |
+| 3 | Empresas, recrutadores e vagas | Implementada localmente (demo/testes/commit pendentes) |
+| 4 | Candidaturas e máquina de estados | Implementada localmente (demo/testes/commit pendentes) |
 | 5 | Currículos, versionamento e motor ATS | Planejado |
 | 6 | Export JSON/HTML, entrevistas e dashboards | Planejado |
 | 7 | Seed de demonstração, hardening e release `v1.0.0` | Planejado |
 
-## Status atual (Sprint 1)
+## Status atual
 
-**Sprint 1 — Autenticação**, iniciada em 2026-11-09 e em andamento (PR pendente).
+**Sprint 1 — Autenticação**, iniciada em 2026-11-09 e concluída (PR pendente).
 O objetivo é entregar a base de identidade da API: cadastro, login com JWT e
 consulta do usuário autenticado.
 
@@ -595,21 +751,106 @@ Validação local registrada em 2026-11-09:
 | `npm run test:e2e` | 2 arquivos, 28 testes, com MySQL local via Docker e migration aplicada |
 | `npx oxlint src/ test/` | Verde (fallback) |
 | `npx tsc --noEmit` | Verde |
-| `npm run lint` | Bloqueado nesta máquina por AppLocker/WDAC em `tsgolint.exe`; o CI em Ubuntu executa o comando completo |
+| `npm run lint` | Exit 0 nesta máquina, com 1 warning preexistente em `test/auth.e2e-spec.ts:232` |
 | `npm run migration:run` | Aplica `1794182400000-CreateUsers` |
 | Smoke test | `/v1/health` 200 com `database: up`, `/docs` 200, register/login/me funcionando e `/me` sem token 401 |
 
 Pendências:
 
-- **Lint completo local:** `npm run lint` type-aware bloqueado pelo ambiente
-  Windows; validado por fallback (`npx oxlint` + `npx tsc --noEmit`).
+- **Lint:** `npm run lint` executa com exit 0 nesta máquina; resta 1 warning
+  preexistente em `test/auth.e2e-spec.ts:232`. O fallback (`npx oxlint` +
+  `npx tsc --noEmit`) também está verde.
 - **PR e CI:** KAN-10, KAN-11 e KAN-12 estão implementadas, mas o PR e a execução
   do CI ainda dependem do repositório remoto.
 - **Revisão humana:** aprovação final do PR pendente.
 - **Deploy e banco remoto:** KAN-7 e KAN-8 adiados conscientemente para priorizar
-  a API; retomam após a Sprint 3.
+  a API; retomam após o fechamento local da Sprint 4.
 - **Proteção de branch:** configuração da `main` com PR obrigatório e checks
   pendente de configuração humana no GitHub.
+
+### Sprint 2 — Perfil profissional (implementada e validada)
+
+Branch `feat/sprint-2-profile`, HEAD `00b0647`. Validação local em 2026-11-18:
+`npm run lint` exit 0 (1 warning preexistente), `npx tsc --noEmit` e
+`npm run build` exit 0, 232/232 testes unitários em 21 arquivos, 192/192 e2e em
+6 arquivos, `npm run migration:run` sem pendências e seed executado 2x com
+118 skills e 84 aliases.
+
+Entregue:
+
+- CRUD/upsert do perfil 1:1 (`GET` 404 sem perfil e `PATCH` com upsert),
+  experiências com bullets, catálogo somente leitura e vínculos de skills,
+  formações, certificações e idiomas;
+- ownership pelo `userId` do JWT, com 404 para recursos de outros usuários;
+- helpers puros de conversão e normalização, seed idempotente do catálogo e
+  exemplos de request/response no Swagger;
+- migration `1794268800000-CreateProfileDomain` aplicada localmente, com
+  charset `utf8mb4`, FKs `ON DELETE CASCADE` e sem drift;
+- correções de integração registradas na
+  [ADR 0002](docs/adr/0002-sprint-2-profile.md) (`hasField` x `undefined` e
+  `dateStrings: ['DATE']` para preservar `YYYY-MM-DD`).
+
+Pendente:
+
+- commit, push, PR, revisão e CI humanos — nada foi enviado ao remoto;
+- os workflows de CD e Dependabot seguem ativos e sem alteração; a decisão
+  sobre o ambiente demo continua registrada como pendência.
+
+### Sprint 3 — Pipeline (implementada localmente)
+
+Branch `feat/sprint-2-profile`, mesma da Sprint 2, HEAD `00b0647`. Nenhuma branch
+nova, nenhum commit e nenhum push. Validação local em 2026-11-18: `npm run lint`
+exit 0 (1 warning preexistente), `npx tsc --noEmit` e `npm run build` exit 0,
+migration `1794960000000-CreatePipelineDomain` aplicada, revertida e reaplicada,
+`schema:log` sem drift e nenhum teste unitário/e2e executado por decisão humana.
+
+Entregue:
+
+- CRUD de `/v1/companies`, com `unique(user_id, name)` → 409, filtro `kind` e
+  exclusão com vagas → 409 (`RESTRICT`);
+- CRUD de `/v1/recruiters`, com e-mail opcional normalizado e agência do mesmo
+  usuário;
+- CRUD de `/v1/jobs`, com stack em `job_skills`, faixa salarial em centavos,
+  filtros e paginação (`companyId`, `seniority`, `skillId`, `q`, `page`, `limit`)
+  e envelope `{ data, meta }`;
+- ownership pelo `userId` do JWT, transação atômica para a stack, exemplos no
+  Swagger e decisões registradas na
+  [ADR 0003](docs/adr/0003-sprint-3-pipeline.md).
+
+Pendente:
+
+- testes unitários/e2e e demo manual com dois usuários, a cargo do humano;
+- commit, push, PR, revisão, CI, merge e deploy — nada foi enviado ao remoto.
+
+### Sprint 4 — Candidaturas (implementada localmente)
+
+Branch `feat/sprint-2-profile`, mesma das Sprints 2 e 3, HEAD `00b0647`. Nenhuma
+branch nova, nenhum commit e nenhum push. Validação local em 2026-11-18:
+`npm run lint` exit 0 (1 warning preexistente em `test/auth.e2e-spec.ts:232`),
+`npx tsc --noEmit` e `npm run build` exit 0, `git diff --check` exit 0, migration
+`1795046400000-CreateApplicationsDomain` aplicada, revertida e reaplicada,
+`migration:show` com 4 migrações aplicadas e `schema:log` via CLI direto
+(`npm run typeorm -- schema:log -d src/database/data-source.ts`) sem drift.
+
+Entregue:
+
+- enum `ApplicationStatus` e `APPLICATION_TRANSITIONS`, com serviço transacional
+  para as transições e o histórico append-only em
+  `application_status_history` (tabela no singular);
+- entidades `Application` e `ApplicationStatusHistory`, DTOs, 6 rotas em `/v1` e
+  exemplos no Swagger;
+- `GET /v1/applications` com filtros `status`, `companyId`, `from`, `to`, `page` e
+  `limit`, envelope `{ data, meta }` e 400 para `sort`;
+- `DELETE /v1/jobs/:id` → 409 quando a vaga possui candidatura;
+- correções da revisão read-only (`currency`/`salaryPeriod: null` no POST e
+  injeção morta) e decisão de 400 global para parâmetro desconhecido, com
+  mensagem rica garantida para `sort`. Detalhes em
+  [`ADR 0004`](docs/adr/0004-sprint-4-applications.md).
+
+Pendente:
+
+- testes unitários/e2e e demo manual não foram escritos nem executados;
+- commit, push, PR, revisão, CI, merge e deploy — nada foi enviado ao remoto.
 
 ## Documentação
 
@@ -620,8 +861,21 @@ Pendências:
   Sprint 0.
 - [`docs/sprints/sprint-01.md`](docs/sprints/sprint-01.md) — escopo, contratos e
   validação da Sprint 1.
+- [`docs/sprints/sprint-02.md`](docs/sprints/sprint-02.md) — escopo, contratos e
+  validação da Sprint 2.
+- [`docs/sprints/sprint-03.md`](docs/sprints/sprint-03.md) — escopo, contratos e
+  validação da Sprint 3.
+- [`docs/sprints/sprint-04.md`](docs/sprints/sprint-04.md) — escopo, contratos e
+  validação da Sprint 4.
 - [`docs/adr/0001-database.md`](docs/adr/0001-database.md) — decisão de banco do
-  ambiente demo.
+  ambiente demo (Proposed).
+- [`docs/adr/0002-sprint-2-profile.md`](docs/adr/0002-sprint-2-profile.md) —
+  busca, conversão de tipos e erros de integridade no domínio de perfil
+  (Accepted).
+- [`docs/adr/0003-sprint-3-pipeline.md`](docs/adr/0003-sprint-3-pipeline.md) —
+  modelo, contratos e decisões da Sprint 3 (Accepted).
+- [`docs/adr/0004-sprint-4-applications.md`](docs/adr/0004-sprint-4-applications.md) —
+  modelo, contratos e decisões da Sprint 4.
 - [`docs/runbook-deploy.md`](docs/runbook-deploy.md) — deploy, migrations e
   rollback.
 
