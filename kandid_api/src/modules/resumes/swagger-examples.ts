@@ -86,3 +86,36 @@ export const RESUME_VERSION_RESPONSE_EXAMPLE: Record<string, unknown> = {
     seniority: 'SENIOR',
   },
 };
+
+/** Corpo de `GET /v1/resume-versions/:id/export?format=json` (sem envelope). */
+export const RESUME_EXPORT_JSON_EXAMPLE: Record<string, unknown> = {
+  resumeId: '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b',
+  version: 1,
+  atsScore: 78,
+  contentSnapshot: RESUME_VERSION_RESPONSE_EXAMPLE.contentSnapshot,
+};
+
+/** Documento curto, porém completo, de `?format=html`. */
+export const RESUME_EXPORT_HTML_EXAMPLE = `<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nome Sobrenome — Currículo</title>
+<style>/* CSS embutido, coluna única */</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Nome Sobrenome</h1>
+    <p class="meta">Backend Developer</p>
+    <p class="contact">email@exemplo.com · +55 11 99999-9999</p>
+  </header>
+  <section>
+    <h2>Resumo</h2>
+    <p>Resumo profissional...</p>
+  </section>
+</main>
+</body>
+</html>
+`;

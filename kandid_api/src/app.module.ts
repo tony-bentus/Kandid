@@ -12,7 +12,9 @@ import { HealthModule } from './health/health.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CertificationsModule } from './modules/certifications/certifications.module.js';
 import { CompaniesModule } from './modules/companies/companies.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { EducationsModule } from './modules/educations/educations.module.js';
+import { InterviewsModule } from './modules/interviews/interviews.module.js';
 import { ExperiencesModule } from './modules/experiences/experiences.module.js';
 import { JobsModule } from './modules/jobs/jobs.module.js';
 import { LanguagesModule } from './modules/languages/languages.module.js';
@@ -80,6 +82,8 @@ import { SkillsModule } from './modules/skills/skills.module.js';
     EducationsModule,
     CertificationsModule,
     LanguagesModule,
+    InterviewsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
