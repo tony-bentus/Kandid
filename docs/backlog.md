@@ -131,15 +131,29 @@ Status: `Planejado` | `Em andamento` | `Implementado localmente` | `Concluído` 
 > **Pendentes:** revisão, commit, push, PR, merge/deploy, demo manual e portão
 > humano. Export JSON/HTML fica para a Sprint 6 (KAN-50/51).
 
+> Sprint 6 em validação na branch `feat/sprint-6-export-dashboard` (base
+> `667bf83`): KAN-50..54 implementados (export JSON/HTML, CRUD de entrevistas e
+> dashboards de funil/compensação). Validação até aqui: `npx tsc --noEmit`,
+> `npm run lint`, `npm run build`, `npm test` 387/387 e `git diff --check` exit 0;
+> migration `1795824000000-CreateInterviewDomain` validada com
+> `run` → `revert` → `run` → `show` e `schema:log` sem drift. E2e: export
+> 30/30, entrevistas 46/46, dashboards 18/18; suíte e2e completa 357/357.
+> Revisão: aprovado com ressalvas, sem bloqueante; achados aplicados em
+> `feedback` (≤5000) e query params (inclusive `?_noQueryParams=` vazio).
+> **Pendentes:** commit, push, PR, merge/deploy, demo manual e portão humano.
+> Decisões em
+> [`docs/sprints/sprint-06.md`](sprints/sprint-06.md) e
+> [`docs/adr/0006-sprint-6-export-dashboard.md`](adr/0006-sprint-6-export-dashboard.md).
+
 ### E5 — Export e dashboard
 
 | ID | História | Sprint | Status |
 |---|---|---|---|
-| KAN-50 | Exportar currículo em JSON | 6 | Planejado |
-| KAN-51 | Exportar currículo em HTML | 6 | Planejado |
-| KAN-52 | CRUD de entrevistas | 6 | Planejado |
-| KAN-53 | Dashboard de funil | 6 | Planejado |
-| KAN-54 | Dashboard de compensação | 6 | Planejado |
+| KAN-50 | Exportar currículo em JSON | 6 | Em validação |
+| KAN-51 | Exportar currículo em HTML | 6 | Em validação |
+| KAN-52 | CRUD de entrevistas | 6 | Em validação |
+| KAN-53 | Dashboard de funil | 6 | Em validação |
+| KAN-54 | Dashboard de compensação | 6 | Em validação |
 
 ### E6 — Hardening
 

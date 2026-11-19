@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -18,6 +19,7 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiExtraModels,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -26,19 +28,26 @@ import {
   ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
+  getSchemaPath,
 } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-user.interface.js';
 import { CreateResumeDto } from './dto/create-resume.dto.js';
 import { CreateResumeVersionDto } from './dto/create-resume-version.dto.js';
+import { ExportResumeVersionQueryDto } from './dto/export-resume-version-query.dto.js';
 import { PaginatedResumesResponseDto } from './dto/paginated-resumes-response.dto.js';
 import { QueryResumeDto } from './dto/query-resume.dto.js';
+import { ResumeExportResponseDto } from './dto/resume-export-response.dto.js';
 import { ResumeResponseDto } from './dto/resume-response.dto.js';
 import { ResumeVersionResponseDto } from './dto/resume-version-response.dto.js';
 import { UpdateResumeDto } from './dto/update-resume.dto.js';
+import { ResumeExportService } from './export/resume-export.service.js';
 import { ResumesService } from './resumes.service.js';
 import {
+  RESUME_EXPORT_HTML_EXAMPLE,
+  RESUME_EXPORT_JSON_EXAMPLE,
   RESUME_LIST_EXAMPLE,
   RESUME_REQUEST_EXAMPLE,
   RESUME_RESPONSE_EXAMPLE,
@@ -211,9 +220,67 @@ export class ResumesController {
 @ApiTags('resume-versions')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@ApiExtraModels(ResumeExportResponseDto)
 @Controller('resume-versions')
 export class ResumeVersionsController {
-  constructor(private readonly resumesService: ResumesService) {}
+  constructor(
+    private readonly resumesService: ResumesService,
+    private readonly resumeExportService: ResumeExportService,
+  ) {}
+
+  /** GET /v1/resume-versions/:id/export?format=json|html — somente leitura. */
+  @Get(':id/export')
+  @ApiOperation({
+    summary: 'Exporta uma versão imutável do currículo em JSON ou HTML',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiQuery({
+    name: 'format',
+    required: true,
+    enum: ['json', 'html'],
+    description: 'Formato do export (obrigatório, minúsculo, sem default)',
+  })
+  @ApiOkResponse({
+    description: 'Snapshot da versão no formato solicitado',
+    content: {
+      'application/json': {
+        schema: { $ref: getSchemaPath(ResumeExportResponseDto) },
+        example: RESUME_EXPORT_JSON_EXAMPLE,
+      },
+      'text/html': {
+        schema: { type: 'string' },
+        example: RESUME_EXPORT_HTML_EXAMPLE,
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description:
+      'format ausente, vazio, repetido, inválido ou query parameter não suportado',
+  })
+  @ApiNotFoundResponse({ description: 'Resume version not found' })
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido ou expirado',
+  })
+  async exportResume(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: ExportResumeVersionQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<ResumeExportResponseDto | string> {
+    const result = await this.resumeExportService.export(
+      user.userId,
+      id,
+      query.format,
+    );
+
+    if (result.format === 'html') {
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return result.body;
+    }
+
+    response.setHeader('Content-Type', 'application/json');
+    return result.body;
+  }
 
   @Get(':id')
   @ApiOperation({
