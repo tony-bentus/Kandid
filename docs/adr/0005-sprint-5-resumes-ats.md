@@ -34,6 +34,8 @@ Padrões aplicados a todas as tabelas: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 CO
 
 Os nomes de FK pedidos — `FK_resumes_user`, `FK_resume_versions_resume`, `FK_resume_versions_job`, `FK_ats_analyses_resume_version`, `FK_ats_analyses_job` — confirmam o plural e devem ser idênticos em entidade e migration, como no ADR 0004 `:83-87`.
 
+**Defaults de timestamp.** O DDL gerado inclui `DEFAULT CURRENT_TIMESTAMP(6)` em `created_at` e `ON UPDATE CURRENT_TIMESTAMP(6)` em `resumes.updated_at`, além do `datetime(6) NOT NULL` listado nas colunas. Esses defaults são exatamente o que `@CreateDateColumn`/`@UpdateDateColumn` geram, não produzem drift no `schema:log` e não são regra de domínio: a migration é a fonte da verdade do DDL. `resume_versions` e `ats_analyses` continuam sem `updated_at`.
+
 **`resumes`** (mutável; única com `updated_at`)
 
 ```text
@@ -305,6 +307,9 @@ Decisões adotadas para destravar KAN-40..43. `docs/sprints/sprint-05.md` **já 
 | 22 | Hash/ordem dos checks | Spec `:291-304` lista IDs, não ordem nem `detail` | **Ordem da spec e `detail = null` quando passa** | Saída estável para fixtures e diff de breakdown |
 | 23 | Ação da FK `resume_versions.job_id` | Proposta do architect era `RESTRICT` (coerente com `applications.job_id`); tech lead decidiu `SET NULL` | **`FK_resume_versions_job ... ON DELETE SET NULL ON UPDATE NO ACTION`**; `job_id` é nullable e nenhuma rota da Sprint 5 altera/preenche essa coluna em versão gravada; `POST /analyze` nunca a modifica | `SET NULL` mantém a versão e o snapshot após exclusão da vaga sem exigir `UPDATE` em tabela imutável; critério: `DELETE` de vaga referenciada zera `job_id` e não remove a versão nem as análises |
 | 24 | Timestamp da migration | Cadeia local existente `1794182400000`, `1794268800000`, `1794960000000`, `1795046400000` | **`1795737600000-CreateResumeDomain`**, sequencial, sem conflito (tech lead conferiu) | Ordem crescente verificada por `migration:show`; nenhuma renumeração de migration anterior |
+| 25 | Unidade de `earned` | Tabela de dimensões escreve `35 * (...)` e `10 * (...)` (`:266-267`), sugerindo `earned` em pontos ponderados; a fórmula normativa `score = round(Σ effectiveWeight(d) * earned(d))` com `effectiveWeight = peso(d)/W` só fecha se `earned` for percentual — e as outras cinco dimensões já são percentuais (`seniority` 100/60/0, `yearsExperience` `min(100, ...)`, `educationCertification` 100/0, `languages` 100/0, `resumeStructure` `100 * aprovados/10`) | **`earned` é sempre inteiro 0..100 em todas as dimensões**; o peso original (35/10/20/15/10/5/5) entra apenas em `weight`/`effectiveWeight` | Critério verificável: 2 de 3 skills obrigatórias com peso de seção 3 → `earned = round(100 * 6/9) = 67`, e não 23. Interpretação do tech lead sobre lacuna do ADR; sujeita ao portão humano |
+| 26 | Escopo de `no-empty-required-sections` | Spec `:291-304` lista o check sem definir o que ele cobre | **Reprova entradas existentes sem conteúdo significativo** em `skills`, `experiences`, `education`, `certifications`, `projects` e `languages`; arrays vazios (`certifications: []`, `projects: []`) **não** reprovam | Resumo, experiência e habilidades ausentes já são cobertos por `has-summary`, `has-experience` e `has-skills`, logo não há dupla contagem. Interpretação do tech lead sobre lacuna do ADR; sujeita ao portão humano |
+| 27 | `DELETE /v1/jobs/:id` com análise ATS | `FK_ats_analyses_job` é `RESTRICT` (Modelo de dados), mas o ADR não definia o comportamento da rota de exclusão de vaga | **`409` (`Cannot delete job with ATS analyses`) antes de chegar ao banco** quando a vaga tem análise; vaga com `resume_versions` mas sem análise continua excluível e o `SET NULL` de `resume_versions.job_id` é preservado | Evita `ER_ROW_IS_REFERENCED_2` virar `500` e preserva a origem do score. Critério: vaga só com versões → `204` e `job_id = null`; vaga com análise → `409` sem alteração |
 
 ## Estratégia de transação
 
@@ -373,26 +378,27 @@ Decisões adotadas para destravar KAN-40..43. `docs/sprints/sprint-05.md` **já 
 - **R7 — Tamanho do JSON:** `content_snapshot` e `breakdown` são `json` sem validação no MySQL; integridade depende da aplicação, como `benefits` no ADR 0004.
 - **R8 — `DELETE /v1/resumes/:id`:** se o humano confirmar que a contagem é 8 e este endpoint sai, é quebra de contrato em relação à spec `:414`; decisão 18 registra o ponto.
 - **R9 — `totalPages` e `page`:** página além do fim devolve `data: []`; igual ao ADR 0004, mas exige teste para não confundir com `404`.
-- **R10 — Nada executado:** nenhum comando, migration, teste, demo, revisão ou commit foi feito por este ADR; o backend-dev precisa validar tudo localmente antes do portão humano.
+- **R10 — Portão humano pendente:** a validação local já está verde e a revisão read-only foi concluída sem blocker/major (ver Validação local); restam demo manual e decisão de commit/push/PR/merge/deploy, que nenhum agente executa neste ADR.
 
 ## Validação local
 
-Nada foi implementado ou executado até aqui. O architect escreveu apenas este ADR; não rodou `lint`, `build`, testes, migrations, Docker, `git` nem leu `.env`. Todos os itens abaixo estão **pendentes** e devem ser preenchidos pelo backend-dev com resultado real, sem “verde” presumido.
+Os comandos abaixo foram executados e reportados pelo time de implementação; o architect não rodou comandos, não criou migration e não leu `.env` (regime da linha 9). Resultados reais da rodada de validação, sem “verde” presumido:
 
-| Verificação | Status |
+| Verificação | Resultado |
 |---|---|
-| `npm ci` / ambiente local | [ ] Pendente |
-| `npm run lint` | [ ] Pendente |
-| `npx tsc --noEmit -p tsconfig.json` | [ ] Pendente |
-| `npm run build` | [ ] Pendente |
-| `npm test` (unitários do motor: normalizer, job-parser, resume-extractor, scorer, checks) | [ ] Pendente |
-| `npm run test:e2e` com MySQL local (8 rotas + `DELETE`) | [ ] Pendente |
-| `npm run migration:run` → `revert` → `run` → `show` (5 migrations ao final) | [ ] Pendente |
-| `npm run typeorm -- schema:log -d src/database/data-source.ts` sem drift | [ ] Pendente |
-| `SHOW INDEX` nas três tabelas sem índice redundante | [ ] Pendente |
-| `git diff --check` | [ ] Pendente |
-| Revisão read-only de código e Swagger `/docs` | [ ] Pendente |
-| Demo manual e decisão de commit/push/PR/merge/deploy | [ ] Pendente — humano |
+| `npx tsc --noEmit` | ✅ exit 0 |
+| `npm run lint` | ✅ exit 0 — 1 warning **preexistente** em `test/auth.e2e-spec.ts:232` |
+| `npm run build` | ✅ exit 0 |
+| `npm test` (unitários do motor: normalizer, job-parser, resume-extractor, scorer, checks) | ✅ 311/311 |
+| `npm run test:e2e` com MySQL local (8 rotas + `DELETE`) | ✅ 257/257 em 7 arquivos, incluindo `test/resumes.e2e-spec.ts` (65 testes) |
+| `git diff --check` | ✅ limpo |
+| `npm run migration:run` → `revert` → `run` → `show` | ✅ `1795737600000-CreateResumeDomain` aplicada; 5 migrations `[X]` ao final |
+| `npm run typeorm -- schema:log -d src/database/data-source.ts` sem drift | ✅ sem drift |
+| Revisão read-only de código e Swagger `/docs` | ✅ concluída — aprovada com ajustes, nenhum blocker/major |
+| `npm ci` / ambiente local | ⏳ sem resultado registrado nesta rodada |
+| `SHOW INDEX` nas três tabelas sem índice redundante | ⏳ sem resultado registrado nesta rodada |
+| Demo manual | ⏳ pendente — humano |
+| Commit/push/PR/merge/deploy | ⏳ pendente — humano |
 
 ## Checklist para o backend-dev
 
@@ -437,9 +443,10 @@ Nenhuma das decisões abaixo bloqueia a implementação; todas são **provisóri
 | 17 | Detecção de formação/certificação/idiomas | Dicionário determinístico provisório no `job-parser` | Validar fixtures realistas e aprovar lista de termos |
 | 18 | Peso do match e ordenação de experiências | Maior peso de seção; `current` primeiro, `startDate DESC`, `sortOrder ASC`, `id ASC` | Confirmar contra currículos de exemplo do produto |
 | 19 | `breakdown.effectiveWeight` | Campo extra para explicar renormalização | Confirmar se o formato de `:268-289` deve permanecer estritamente fechado |
-| 20 | Ausência de testes/demo | Tudo pendente neste ADR | Humanos executam e decidem commit/push/PR/merge/deploy; nenhum agente faz isso |
+| 20 | Demo e fechamento | Testes, migrations e revisão read-only concluídos e verdes; demo manual não executada | Humanos executam a demo e decidem commit/push/PR/merge/deploy; nenhum agente faz isso |
 | 21 | `FK_resume_versions_job = SET NULL` e a criação de versão | O tech lead escreveu que “nenhuma rota da Sprint 5 preenche” `job_id`; este ADR preserva a decisão 14 (`jobId?` opcional **apenas na inserção** da versão, validado como vaga do usuário) e entende a frase como “nenhuma rota altera/preenche uma versão já gravada” — `POST /analyze` nunca a modifica | Confirmar a leitura literal: se nenhuma rota puder sequer enviar `jobId`, remove-se o campo de `CreateResumeVersionDto` **sem mudança de schema**; o `SET NULL` continua válido de qualquer forma |
-| 22 | Timestamp `1795737600000` | Tech lead conferiu a cadeia `1794182400000`, `1794268800000`, `1794960000000`, `1795046400000`; não há conflito e não se renomeiam migrations antigas | Confirmar com `migration:show` após o backend-dev aplicar a migration |
+| 22 | Timestamp `1795737600000` | Tech lead conferiu a cadeia `1794182400000`, `1794268800000`, `1794960000000`, `1795046400000`; não há conflito e não se renomeiam migrations antigas | Confirmar no portão humano que `migration:show` e `schema:log` seguem limpos após o commit; a migration já foi aplicada e revertida localmente com sucesso |
+| 23 | `earned` percentual e escopo de `no-empty-required-sections` (decisões 25 e 26) | São **interpretações do tech lead sobre lacunas do ADR**: `earned` sempre inteiro 0..100 e o check só reprova entradas existentes sem conteúdo | Confirmar as duas interpretações explicitamente antes do fechamento |
 
 ## Referências
 

@@ -1,9 +1,9 @@
 # Sprint 5 — Currículos e motor ATS
 
-- Status: Planejada — aguardando implementação, testes, demo e portão humano
+- Status: Implementada e validada localmente — aguardando revisão, commit e demo/portão humano
 - Branch: `feat/sprint-5-resumes`, base `46f4e8a` (merge do PR #12). Sprints 0–4 concluídas e mergeadas em `main`
 - Início: 2026-11-19 (documento de planejamento)
-- Encerramento local: pendente — nenhuma implementação, validação, demo ou commit executado nesta etapa de planejamento
+- Encerramento local: implementação, testes e validação local concluídos em 2026-11-19 (KAN-40..43, migration `1795737600000-CreateResumeDomain`, lint/tsc/build/test/e2e); pendentes revisão read-only, commit/push/PR/merge/deploy e demo/portão humano
 - Épico: E4 (`docs/backlog.md`)
 
 ## Objetivo
@@ -28,7 +28,7 @@ ambiguidades abaixo.
 | KAN-40 | Criar currículo e gerar versão | `resume`/`resume_version`, builder de snapshot a partir do perfil, versionamento transacional com `pessimistic_write`, imutabilidade, rotas de currículo e de versão | 2 dias |
 | KAN-41 | Extrair keywords da vaga | `normalizer.ts` e `job-parser.ts` em `src/modules/ats/engine/`, seções obrigatórias/desejáveis, aliases, anos e senioridade | 2 dias |
 | KAN-42 | Calcular score e checks | `resume-extractor.ts`, `scorer.ts` e `checks.ts`, pesos/renormalização da spec, breakdown e checks estruturais | 2 dias |
-| KAN-43 | Persistir e consultar análise | `ats_analysis`, `POST /v1/resume-versions/:id/analyze`, `GET /v1/resume-versions/:id/analysis`, leitura do score na versão | 1 dia |
+| KAN-43 | Persistir e consultar análise | `ats_analysis`, `POST /v1/resume-versions/:id/analyze`, `GET /v1/resume-versions/:id/analysis`, score consultado na análise; `atsScore` da versão permanece `null` | 1 dia |
 
 Definition of Ready por história: critérios Given/When/Then abaixo, contratos e
 exemplos na seção Contratos, regras de negócio e modelo de dados definidos, demo
@@ -61,10 +61,11 @@ da seção Pendente de validação humana/architect:
 7. **Score com dimensionamentos e pesos exatos da spec** (35/10/20/15/10/5/5),
    renormalização quando a dimensão não for aplicável, `clamp` em `[0, 100]` e
    arredondamento para inteiro com `Math.round`. Ver ambiguidade 8.
-8. **Rotas exatas desta sprint:** `POST/GET/PATCH/DELETE /v1/resumes`,
+8. **Rotas exatas desta sprint (nove endpoints):** cinco de `/v1/resumes`
+   (`POST`, `GET` de listagem, `GET /:id`, `PATCH /:id`, `DELETE /:id`), mais
    `POST /v1/resumes/:id/versions`, `GET /v1/resume-versions/:id`,
-   `POST /v1/resume-versions/:id/analyze`, `GET /v1/resume-versions/:id/analysis`.
-   Sem rotas de export.
+   `POST /v1/resume-versions/:id/analyze` e
+   `GET /v1/resume-versions/:id/analysis`. Sem rotas de export.
 9. **Todo endpoint** com `JwtAuthGuard`, `@CurrentUser()`, escopo por `userId`,
    `ParseUUIDPipe` nos parâmetros `:id`, Swagger completo e envelope `{ data, meta }`
    na única listagem (`GET /v1/resumes`), conforme `docs/prompt-kandid.md:425-436`.
@@ -81,7 +82,7 @@ A implementação deve seguir **esta** seção quando houver divergência:
 | Nomenclatura física das tabelas | Nomes plurais do projeto: `resumes`, `resume_versions` e `ats_analyses`; entidades TypeScript no singular (`Resume`, `ResumeVersion`, `AtsAnalysis`), decoradas com esses nomes de tabela | A spec cita `resume`, `resume_version` e `ats_analysis` como conceito no singular; a migration adota o plural de `users`, `profiles` e `applications` (`docs/adr/0004-sprint-4-applications.md:83-87`) |
 | Export na Fase 3 (`spec:363-372,521,524`) | Fora da Sprint 5; KAN-50/51 na Sprint 6 | Backlog é o plano aprovado; não inventar rotas de export (decisão 1) |
 | Vínculo com candidatura | Nenhuma alteração em `applications`; `resumeVersionId` segue `null` na resposta | Escopo explícito da decisão 2; história separada no portão |
-| `ats_score` em `resume_version` (`spec:153,522`) vs. append-only | Coluna existe e permanece `null`; **nenhum `UPDATE`** na versão. O score vigente é lido da análise mais recente em `ats_analyses` e exposto em `GET /v1/resume-versions/:id` como campo derivado | A decisão 3 (sem `UPDATE`) prevalece; a imutabilidade não pode ser quebrada por escrita de score. Sinalizado em Riscos para o portão |
+| `ats_score` em `resume_version` (`spec:153,522`) vs. append-only | Coluna existe e permanece `null`; **nenhum `UPDATE`** na versão. O score é consultado em `GET /v1/resume-versions/:id/analysis`; `atsScore` da versão permanece `null` (não é campo derivado) | A decisão 3 (sem `UPDATE`) prevalece; a imutabilidade não pode ser quebrada por escrita de score. Sinalizado em Riscos para o portão |
 | `GET` da análise | Rota nova `GET /v1/resume-versions/:id/analysis` (decisão 5), embora a spec só liste o POST | Necessária para KAN-43 consultar o resultado persistido |
 | Primeira versão | `version = 1` na primeira geração, incremento subsequente sob lock | Spec manda incrementar (`spec:360`); confirmação do valor inicial na ambiguidade 3 |
 | Exclusão de currículo com versões | `DELETE /v1/resumes/:id` responde **409** se houver versões; `resume_versions` não é apagada | Implicação direta de append-only (decisão 3); `204` somente sem versões |
@@ -117,22 +118,23 @@ A implementação deve seguir **esta** seção quando houver divergência:
 
 ## Validação local (2026-11-19)
 
-Branch `feat/sprint-5-resumes`, base `46f4e8a`. Nenhuma implementação, teste, migration,
-demo, commit, push, PR ou deploy executado nesta etapa de planejamento.
+Branch `feat/sprint-5-resumes`, base `46f4e8a`. Implementação, testes e validação local
+concluídos em 2026-11-19; revisão read-only, commit, push, PR, merge, deploy e demo
+manual seguem pendentes.
 
 | Verificação | Resultado |
 |---|---|
-| `npm run lint` | Pendente — aguardando implementação |
-| `npx tsc --noEmit -p tsconfig.json` | Pendente — aguardando implementação |
-| `npm run build` | Pendente — aguardando implementação |
-| `git diff --check` | Pendente — aguardando implementação |
-| `npm test` (unitários do motor ATS: normalizer, job-parser, resume-extractor, scorer, checks) | Pendente — aguardando implementação |
-| `npm run test:e2e` (MySQL local; fluxo completo criar→versionar→analisar→consultar) | Pendente — aguardando implementação |
-| `npm run migration:run` → `npm run migration:revert` → `npm run migration:run` → `npm run migration:show` | Pendente — aguardando implementação |
-| Drift de schema via `npm run typeorm -- schema:log -d src/database/data-source.ts` | Pendente — aguardando implementação |
-| Revisão read-only e Swagger em `/docs` | Pendente — aguardando implementação |
-| Demo manual (seção abaixo) | Pendente — aguardando implementação |
-| Git (commit/push/PR/merge/deploy) | Pendente — aguardando implementação |
+| `npm run lint` | 0 erros (1 warning preexistente em `test/auth.e2e-spec.ts`) |
+| `npx tsc --noEmit -p tsconfig.json` | 0 erros |
+| `npm run build` | 0 erros |
+| `git diff --check` | Limpo |
+| `npm test` (unitários do motor ATS: normalizer, job-parser, resume-extractor, scorer, checks) | 311/311 passando |
+| `npm run test:e2e` (MySQL local; fluxo completo criar→versionar→analisar→consultar) | 257/257 passando, incluindo `test/resumes.e2e-spec.ts` (65 testes) |
+| `npm run migration:run` → `npm run migration:revert` → `npm run migration:run` → `npm run migration:show` | Cadeia concluída |
+| Drift de schema via `npm run typeorm -- schema:log -d src/database/data-source.ts` | Sem drift |
+| Revisão read-only e Swagger em `/docs` | Swagger documentado nos controllers; revisão read-only ainda pendente |
+| Demo manual (seção abaixo) | Pendente — execução humana |
+| Git (commit/push/PR/merge/deploy) | Pendente — aguardando revisão e aprovação humana |
 
 Observação: ao contrário da Sprint 4, **testes são esperados nesta sprint**, em
 especial os unitários do motor ATS com vaga realista e currículo (Fase 3 da spec).
@@ -147,19 +149,22 @@ exportações futuras.
 
 - Dado que estou autenticado, quando envio `POST /v1/resumes` com `{ "name": "Backend", "targetRole": "Desenvolvedor Backend Sênior", "isDefault": true }`, então recebo 201 com `ResumeResponseDto` contendo `userId` igual ao `sub` do token, `isDefault: true` e `createdAt`/`updatedAt` em ISO 8601 UTC.
 - Dado que envio `name` vazio, ausente ou acima de 120 caracteres, `targetRole` acima de 160 caracteres ou `isDefault` não-booleano, quando crio, então recebo 400 com mensagem indicando o campo inválido e nada é persistido.
+- Dado que já existe um currículo meu com o mesmo `name`, quando crio (`POST`) ou renomeio (`PATCH`), então recebo 409 (`UQ_resumes_user_name`) e nenhuma escrita é aplicada.
 - Dado que envio `userId`, `user_id`, `is_default`, `createdAt`, `updatedAt` ou qualquer campo fora do DTO, quando crio ou atualizo, então recebo 400 pelo `forbidNonWhitelisted`.
-- Dado que omito `targetRole` ou `isDefault` no POST, quando crio, então são persistidos como `null` e `false`, respectivamente; dado que os informo válidos, então substituem o default.
+- Dado que omito `targetRole` ou `isDefault` no POST, quando crio o **primeiro** currículo, então ele é persistido com `isDefault: true` mesmo que `isDefault` venha `false` ou ausente (ADR decisão 6), e `targetRole` omitido recebe `desiredRole` do perfil ou `''`; nunca é `null`; em currículos seguintes, `isDefault` omitido é persistido como `false`; quando informo valores válidos, eles substituem o default.
 - Dado que já existe um currículo meu com `isDefault: true`, quando crio ou atualizo outro com `isDefault: true`, então o anterior passa a `false` na **mesma transação**; no máximo um currículo do usuário fica com default. Falha em qualquer escrita reverte ambas.
+- Dado que já possuo currículos e envio `isDefault: false` ou omito o campo, quando crio ou atualizo, então nenhum default é criado/alterado e o usuário pode ficar sem default; a invariante é "no máximo um", não "pelo menos um".
 - Dado que listo `GET /v1/resumes`, então recebo somente currículos do meu `userId` em `{ data, meta: { page, limit, total, totalPages } }`, com `page` default 1, `limit` default 20 (máximo 100) e ordem fixa `createdAt DESC, id ASC`; `page < 1`, `limit < 1`, `limit > 100` ou parâmetro fora da whitelist → 400.
 - Dado que consulto `GET /v1/resumes/:id`, então recebo 200 com o mesmo `ResumeResponseDto`; currículo de outro usuário, inexistente ou `:id` inválido → 404 ou 400 (`ParseUUIDPipe`), respectivamente, sem revelar existência.
-- Dado que envio `PATCH /v1/resumes/:id` com um subconjunto de `name`, `targetRole` e `isDefault`, quando atualizo, então recebo 200 e os campos ausentes permanecem inalterados; `null` em `name` → 400 e `null` em `targetRole` limpa o campo.
+- Dado que envio `PATCH /v1/resumes/:id` com um subconjunto de `name`, `targetRole` e `isDefault`, quando atualizo, então recebo 200 e os campos ausentes permanecem inalterados; `null` em `name`, `targetRole` ou `isDefault` → 400; `targetRole: ''` é aceito e representa "não definido".
 - Dado que envio `DELETE /v1/resumes/:id` sem versões vinculadas, então recebo 204; dado que existem versões, então recebo 409 e nada é apagado, preservando append-only.
-- Dado que possuo perfil completo e envio `POST /v1/resumes/:id/versions` sem body, então recebo 201 com `id`, `resumeId`, `version`, `contentSnapshot`, `atsScore: null` e `createdAt`; o snapshot contém `schemaVersion: "1.0"`, `generatedAt` ISO 8601 UTC, `targetRole` do currículo e `candidate`, `summary`, `skills`, `experiences`, `education`, `certifications`, `languages` e `projects` do perfil.
+- Dado que possuo perfil completo e envio `POST /v1/resumes/:id/versions` sem body ou com `{ "jobId": "<uuid>" }` opcional, então recebo 201 com `id`, `resumeId`, `version`, `contentSnapshot`, `atsScore: null` e `createdAt`; o snapshot contém `schemaVersion: "1.0"`, `generatedAt` ISO 8601 UTC, `targetRole` do currículo e `candidate`, `summary`, `skills`, `experiences`, `education`, `certifications`, `languages` e `projects` do perfil.
+- Dado que envio `jobId` no POST de versão, quando a vaga é minha, então a versão é criada com esse `jobId`; quando a vaga é alheia ou inexistente, então recebo 404 e nenhuma versão é criada; sem `jobId`, a versão fica com `jobId: null`.
 - Dado que não existe perfil cadastrado, quando gero uma versão, então recebo 400 com mensagem clara indicando que o perfil é necessário e nenhuma versão é criada.
 - Dado que gero versões em sequência, então `version` é 1, 2, 3... (ambiguidade 3) e `unique(resume_id, version)` é respeitada; duas requisições concorrentes na mesma transação com `pessimistic_write` geram versões distintas, sem duplicidade.
 - Dado que tento violar `unique(resume_id, version)` em corrida, então recebo 409 e nenhuma versão duplicada é persistida (traduzindo `ER_DUP_ENTRY`).
 - Dado que a versão foi criada, quando tento `PATCH`, `DELETE` ou reenviar o POST para alterar `contentSnapshot`, `version`, `resumeId` ou `createdAt`, então não existe rota contratada: nada é modificado; o snapshot permanece idêntico ao original.
-- Dado que consulto `GET /v1/resume-versions/:id`, então recebo 200 com o snapshot imutável e `atsScore` igual ao score da análise mais recente, ou `null` se ainda não houver análise; versão de outro usuário/inexistente → 404, `:id` inválido → 400.
+- Dado que consulto `GET /v1/resume-versions/:id`, então recebo 200 com o snapshot imutável e `atsScore: null`; o score é consultado em `GET /v1/resume-versions/:id/analysis`; versão de outro usuário/inexistente → 404, `:id` inválido → 400.
 - Dado que não envio `Authorization`, quando chamo qualquer rota de KAN-40, então recebo 401.
 
 ### KAN-41 — Extrair keywords da vaga
@@ -202,12 +207,13 @@ versões **para** auditar o resultado de cada vaga ao longo do tempo.
 
 - Dado que estou autenticado e a versão é minha, quando envio `POST /v1/resume-versions/:id/analyze` com `{ "jobId": "<uuid>" }` de vaga minha, então recebo 201 com `AtsAnalysisResponseDto` (`id`, `resumeVersionId`, `jobId`, `score`, `breakdown`, `checks`, `matchedKeywords`, `missingKeywords`, `createdAt`) e a análise é gravada em transação.
 - Dado que a vaga não existe ou pertence a outro usuário, quando analiso, então recebo 404 sem revelar existência; `jobId` ausente ou inválido → 400; `:id` da versão inválido → 400 (`ParseUUIDPipe`).
+- Dado que a versão tem `jobId` preenchido e envio no `analyze` um `jobId` diferente, então recebo 400 e nenhuma análise é gravada; versão com `jobId: null` aceita qualquer vaga minha.
 - Dado que repito a análise para o mesmo par `(resume_version_id, job_id)`, quando envio o POST novamente, então uma **nova linha** é inserida (permitindo auditoria), sem `UPDATE` e sem `DELETE` em registros anteriores.
 - Dado que existem várias análises para a mesma versão e vaga, quando consulto `GET /v1/resume-versions/:id/analysis`, então recebo 200 com a mais recente, ordenada por `created_at DESC, id ASC`.
 - Dado que a versão ainda não tem análise, quando consulto o GET, então recebo 404 com mensagem indicando que não há análise para a versão.
 - Dado que a versão pertence a outro usuário ou não existe, quando chamo POST ou GET de análise, então recebo 404; sem `Authorization` → 401.
 - Dado que envio campos fora do DTO no POST de análise, quando analiso, então recebo 400 pelo `forbidNonWhitelisted`.
-- Dado que a análise foi persistida, quando consulto `GET /v1/resume-versions/:id`, então `atsScore` reflete o score da análise mais recente, enquanto `contentSnapshot`, `version`, `resumeId` e `createdAt` permanecem byte a byte idênticos.
+- Dado que a análise foi persistida, quando consulto `GET /v1/resume-versions/:id`, então `atsScore` permanece `null`; o score é consultado em `GET /v1/resume-versions/:id/analysis`, enquanto `contentSnapshot`, `version`, `resumeId` e `createdAt` permanecem byte a byte idênticos.
 - Dado que a transação de análise falha em qualquer escrita, quando responde, então nenhuma linha de `ats_analysis` é persistida e nenhuma alteração acontece na versão.
 
 ## Contratos
@@ -218,12 +224,12 @@ O `userId` vem exclusivamente do token (`@CurrentUser()`). IDs de path usam
 
 | Método | Rota | Request | Sucesso | Erros |
 |---|---|---|---|---|
-| POST | `/v1/resumes` | `CreateResumeDto` | 201 `ResumeResponseDto` | 400, 401 |
+| POST | `/v1/resumes` | `CreateResumeDto` | 201 `ResumeResponseDto` | 400, 401, 409 |
 | GET | `/v1/resumes` | query `page`, `limit` | 200 envelope paginado | 400, 401 |
 | GET | `/v1/resumes/:id` | — | 200 `ResumeResponseDto` | 400, 401, 404 |
-| PATCH | `/v1/resumes/:id` | `UpdateResumeDto` | 200 `ResumeResponseDto` | 400, 401, 404 |
+| PATCH | `/v1/resumes/:id` | `UpdateResumeDto` | 200 `ResumeResponseDto` | 400, 401, 404, 409 |
 | DELETE | `/v1/resumes/:id` | — | 204 | 400, 401, 404, 409 |
-| POST | `/v1/resumes/:id/versions` | sem body | 201 `ResumeVersionResponseDto` | 400, 401, 404, 409 |
+| POST | `/v1/resumes/:id/versions` | sem body ou `CreateResumeVersionDto` `{ jobId? }` | 201 `ResumeVersionResponseDto` | 400, 401, 404, 409 |
 | GET | `/v1/resume-versions/:id` | — | 200 `ResumeVersionResponseDto` | 400, 401, 404 |
 | POST | `/v1/resume-versions/:id/analyze` | `AnalyzeResumeDto` `{ jobId }` | 201 `AtsAnalysisResponseDto` | 400, 401, 404 |
 | GET | `/v1/resume-versions/:id/analysis` | — | 200 `AtsAnalysisResponseDto` | 400, 401, 404 |
@@ -268,6 +274,7 @@ segue literalmente o contrato da spec (`docs/prompt-kandid.md:310-357`):
   "contentSnapshot": {
     "schemaVersion": "1.0",
     "targetRole": "Desenvolvedor Backend Sênior",
+    "seniority": "SENIOR",
     "generatedAt": "2026-11-19T12:05:00.000Z",
     "candidate": {
       "name": "Nome Sobrenome",
@@ -383,7 +390,8 @@ Exemplo de erro (`PATCH /v1/resumes/3f2a...` com `{ "userId": "outro" }`):
    `userId`/`user_id` no body → 400. Recurso alheio ou inexistente → 404, nunca 403.
    Vaga usada na análise deve pertencer ao mesmo usuário; outra vaga → 404.
 2. **Currículo e default**: vários currículos por usuário; `name` obrigatório
-   (1–120), `targetRole` opcional (≤ 160), `isDefault` default `false`. No máximo um
+   (1–120), `targetRole` opcional no DTO (≤ 160; persistido como `desiredRole` do
+   perfil ou `''`, nunca `null`), `isDefault` default `false`. No máximo um
    default por usuário, ajustado na mesma transação (decisão 4). Não há regra de
    "sempre existe um default".
 3. **Geração de versão**: transação obrigatória (`spec:436`) com `pessimistic_write`
@@ -392,11 +400,14 @@ Exemplo de erro (`PATCH /v1/resumes/3f2a...` com `{ "userId": "outro" }`):
    o perfil do mesmo usuário.
 4. **Imutabilidade**: `content_snapshot`, `version`, `resumeId` e `createdAt` nunca
    são alterados; `resume_version` é append-only (decisão 3). Não há `UPDATE`, `DELETE`
-   nem rotas de edição. `ats_score` permanece `null` na coluna; o score da resposta é
-   derivado da análise mais recente (ver Resolução de conflitos).
+   nem rotas de edição. `ats_score` permanece `null` na coluna e `atsScore` da versão
+   permanece `null`; o score é consultado em `GET /v1/resume-versions/:id/analysis`
+   (ver Resolução de conflitos).
 5. **Snapshot**: `schemaVersion: "1.0"`, `generatedAt` em ISO 8601 UTC e seções
    `candidate`, `summary`, `skills`, `experiences`, `education`, `certifications`,
-   `languages`, `projects`, conforme `spec:310-357`. Gerado uma vez, nunca reescrito.
+   `languages`, `projects`, conforme `spec:310-357`. Inclui a extensão provisória
+   `seniority`, copiada de `profile.desired_seniority` na geração; ausente → dimensão
+   de senioridade `notApplicable` no ATS. Gerado uma vez, nunca reescrito.
 6. **Motor ATS**: funções puras em `src/modules/ats/engine/`, sem IA, sem I/O e sem
    estado oculto. Entradas: `job.description` + catálogo de skills, e
    `content_snapshot`. Mesmas entradas → mesma saída.
@@ -438,9 +449,9 @@ decoradas com os nomes de tabela plurais (`resumes`, `resume_versions`,
 
 | Tabela | Campos principais | Restrições e FKs |
 |---|---|---|
-| `resumes` | `id`, `user_id`, `name varchar(120)`, `target_role varchar(160) NULL`, `is_default boolean NOT NULL default 0`, `created_at datetime(6)`, `updated_at datetime(6)` | FK `FK_resumes_user` (`user_id → users.id`, `CASCADE`); índice `(user_id, created_at)`. Unicidade do default garantida em transação, não por `UNIQUE` declarativo |
-| `resume_versions` | `id`, `resume_id`, `version int`, `job_id varchar(36) NULL`, `content_snapshot json`, `ats_score int NULL`, `created_at datetime(6)` | `UNIQUE (resume_id, version)`; FK `FK_resume_versions_resume` (`resume_id → resumes.id`, `RESTRICT` — impede apagar currículo com versões); FK `FK_resume_versions_job` (`job_id → jobs.id`, `SET NULL` — a coluna é nullable e nenhuma rota desta sprint a preenche); append-only, sem `updated_at` |
-| `ats_analyses` | `id`, `resume_version_id`, `job_id`, `score int`, `breakdown json`, `checks json`, `matched_keywords json`, `missing_keywords json`, `created_at datetime(6)` | FK `FK_ats_analyses_resume_version` (`resume_version_id → resume_versions.id`, `CASCADE`); FK `FK_ats_analyses_job` (`job_id → jobs.id`, `RESTRICT`, mantém a auditoria da vaga); índice `(resume_version_id, job_id, created_at, id)` para a consulta da mais recente; múltiplas linhas por par, append-only, sem `updated_at` |
+| `resumes` | `id`, `user_id`, `name varchar(120)`, `target_role varchar(160) NOT NULL`, `is_default boolean NOT NULL default 0`, `created_at datetime(6)`, `updated_at datetime(6)` | FK `FK_resumes_user` (`user_id → users.id`, `CASCADE`); `UNIQUE UQ_resumes_user_name (user_id, name)` (nome duplicado → 409 no POST e no PATCH); índice `IX_resumes_user_created (user_id, created_at, id)`. Unicidade do default garantida em transação, não por `UNIQUE` declarativo |
+| `resume_versions` | `id`, `resume_id`, `version int`, `job_id varchar(36) NULL`, `content_snapshot json`, `ats_score int NULL`, `created_at datetime(6)` | `UNIQUE UQ_resume_versions_resume_version (resume_id, version)`; índice `IX_resume_versions_job_id (job_id)`; FK `FK_resume_versions_resume` (`resume_id → resumes.id`, `RESTRICT` — impede apagar currículo com versões); FK `FK_resume_versions_job` (`job_id → jobs.id`, `SET NULL` — a coluna é nullable e só é preenchida quando `jobId` é enviado no `POST /v1/resumes/:id/versions`); append-only, sem `updated_at` |
+| `ats_analyses` | `id`, `resume_version_id`, `job_id`, `score int`, `breakdown json`, `checks json`, `matched_keywords json`, `missing_keywords json`, `created_at datetime(6)` | FK `FK_ats_analyses_resume_version` (`resume_version_id → resume_versions.id`, `CASCADE`); FK `FK_ats_analyses_job` (`job_id → jobs.id`, `RESTRICT`, mantém a auditoria da vaga); índices `IX_ats_analyses_version_created (resume_version_id, created_at, id)` para a consulta da mais recente e `IX_ats_analyses_job_created (job_id, created_at, id)` para consultas por vaga; múltiplas linhas por par, append-only, sem `updated_at` |
 
 Enums reaproveitados da spec (`docs/prompt-kandid.md:162-170`), sem criar novos:
 `Seniority`, `WorkModel`, `ContractType`, `SkillCategory`, `SkillLevel`,
@@ -458,14 +469,14 @@ Docker, `npm run migration:run`, `npm run seed:skills`, `npm run start:dev`, Swa
 1. Como A, complete o perfil (`PATCH /v1/me/profile`), incluindo skills com aliases
    relevantes, uma experiência recente com highlights, formação e idioma. Guarde os
    dados para conferir o snapshot.
-2. Como A, `POST /v1/resumes` com `{"name":"Backend","targetRole":"Desenvolvedor Backend Sênior","isDefault":true}` → 201. Crie um segundo currículo com `isDefault: true` → 201; confirme que o primeiro voltou a `isDefault: false` em `GET /v1/resumes`.
+2. Como A, crie o primeiro currículo com `POST /v1/resumes` e `{"name":"Backend","targetRole":"Desenvolvedor Backend Sênior"}` (sem `isDefault`) → 201 com `isDefault: true`, pois o primeiro vira default automaticamente (ADR decisão 6). Crie um segundo currículo com `isDefault: true` → 201; confirme que o primeiro voltou a `isDefault: false` em `GET /v1/resumes`.
 3. Teste validações: `name` com 121 caracteres → 400; `userId` no body → 400; sem `Authorization` → 401; `GET /v1/resumes/:id` com `TOKEN_B` → 404; `:id` inválido → 400.
 4. Como A, crie uma vaga com `POST /v1/jobs` cuja descrição contenha seções e skills reconhecidas, por exemplo: `Requisitos: Node.js, TypeScript, 5+ anos de experiência. Diferenciais: Kubernetes. Senioridade: Sênior.` Guarde o `jobId`.
 5. Como A, `POST /v1/resumes/<id>/versions` → 201 com `version: 1` e snapshot completo. Repita → `version: 2`. Guarde o `id` da versão 1 e o JSON exato do `contentSnapshot`.
 6. Confira a imutabilidade: `GET /v1/resume-versions/<id>` devolve o mesmo snapshot da versão 1; não há `PATCH`/`DELETE` de versão (404/405 conforme o framework). `DELETE /v1/resumes/<id>` com versões vinculadas → 409.
 7. Como A, `POST /v1/resume-versions/<versao1>/analyze` com `{"jobId":"<jobId>"}` → 201 com `score`, `breakdown`, `checks`, `matchedKeywords` e `missingKeywords`. Confira que os pesos aplicáveis somam 100 após renormalização e que dimensões não aplicáveis estão marcadas.
 8. Repita o POST de análise → 201 com nova linha. `GET /v1/resume-versions/<versao1>/analysis` → 200 com a análise mais recente por `created_at DESC, id ASC`.
-9. `GET /v1/resume-versions/<versao1>` → `atsScore` igual ao score da análise mais recente, com o mesmo `contentSnapshot`/`version`/`createdAt` do passo 5.
+9. `GET /v1/resume-versions/<versao1>` → `atsScore: null` (score consultado na análise, não exposto como campo derivado na versão), com o mesmo `contentSnapshot`/`version`/`createdAt` do passo 5; confirme o score em `GET /v1/resume-versions/<versao1>/analysis`.
 10. Antes de analisar uma versão sem análise, confirme `GET .../analysis` → 404. Com `TOKEN_B`, repita POST e GET de análise na versão de A → 404; com `jobId` alheio → 404; com `jobId` inválido → 400.
 11. Verifique o isolamento final: com `TOKEN_B`, `GET /v1/resume-versions/<versao1>` e `GET .../analysis` → 404. Confirme que `resumeVersionId` de qualquer candidatura existente continua `null` e que não existem rotas de export nesta sprint.
 
@@ -485,37 +496,37 @@ Docker, `npm run migration:run`, `npm run seed:skills`, `npm run start:dev`, Swa
 | Exclusão de vaga com análise persistida | `ats_analysis.job_id` com `RESTRICT`; comportamento consistente com a Sprint 4, sem alterar `applications` |
 | Escopo de export invadido a Sprint 5 | Decisão 1 e fora de escopo explícito; nenhuma rota `/export` no contrato |
 | `GET` de análise inventado sem confirmação | Decisão 5 registra a necessidade em KAN-43; ambiguidade 6 no portão |
-| Testes ainda não escritos/executados | DoD exige unitários do motor e e2e com MySQL; validação local toda pendente |
+| Testes não executados no fechamento | Mitigado: unitários do motor e e2e com MySQL escritos e verdes (311 unitários, 257 e2e); resta a demo manual e o portão humano |
 
 ## Definition of Done
 
-- [ ] `docs/sprints/sprint-05.md` escrito com Escopo, Decisões, Resolução de conflitos, critérios Given/When/Then, contratos e exemplos, regras, modelo de dados, demo manual, riscos, DoD, tarefas, ambiguidades e referências.
-- [ ] KAN-40, KAN-41, KAN-42 e KAN-43 implementados conforme os critérios acima, na branch `feat/sprint-5-resumes` (base `46f4e8a`).
-- [ ] Entidades `resume`, `resume_version` e `ats_analysis`, DTOs, services, controllers, módulos e Swagger documentado, sem rotas fora da decisão 8.
-- [ ] Migration `1795737600000-CreateResumeDomain` criada; cadeia local `migration:run` → `migration:revert` → `migration:run` → `migration:show` concluída e `schema:log` via CLI sem drift.
-- [ ] **Testes unitários do motor ATS escritos e passando** (`normalizer`, `job-parser`, `resume-extractor`, `scorer`, `checks`), com vaga realista + currículo e fixtures determinísticas.
-- [ ] `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npm run build`, `npm test` e `npm run test:e2e` (com MySQL) executados com sucesso.
+- [x] `docs/sprints/sprint-05.md` escrito com Escopo, Decisões, Resolução de conflitos, critérios Given/When/Then, contratos e exemplos, regras, modelo de dados, demo manual, riscos, DoD, tarefas, ambiguidades e referências.
+- [x] KAN-40, KAN-41, KAN-42 e KAN-43 implementados conforme os critérios acima, na branch `feat/sprint-5-resumes` (base `46f4e8a`).
+- [x] Entidades `resume`, `resume_version` e `ats_analysis`, DTOs, services, controllers, módulos e Swagger documentado, sem rotas fora da decisão 8.
+- [x] Migration `1795737600000-CreateResumeDomain` criada; cadeia local `migration:run` → `migration:revert` → `migration:run` → `migration:show` concluída e `schema:log` via CLI sem drift.
+- [x] **Testes unitários do motor ATS escritos e passando** (`normalizer`, `job-parser`, `resume-extractor`, `scorer`, `checks`), com vaga realista + currículo e fixtures determinísticas.
+- [x] `npm run lint`, `npx tsc --noEmit -p tsconfig.json`, `npm run build`, `npm test` e `npm run test:e2e` (com MySQL) executados com sucesso.
 - [ ] `git diff --check` limpo e revisão read-only executada, com achados registrados.
 - [ ] Demo manual executada pelo humano, incluindo imutabilidade da versão e isolamento entre usuários.
-- [ ] Swagger em `/docs` com todos os endpoints, DTOs, envelopes e exemplos desta sprint.
-- [ ] Nenhum segredo introduzido; `.env` não lido; nenhuma alteração em `applications` e nenhuma rota de export.
+- [x] Swagger em `/docs` com todos os endpoints, DTOs, envelopes e exemplos desta sprint.
+- [x] Nenhum segredo introduzido; `.env` não lido; nenhuma alteração em `applications` e nenhuma rota de export.
 - [ ] Envios de commit/push/PR/merge/deploy aguardam aprovação humana, conforme `AGENTS.md`.
 
 ## Tarefas
 
 - [x] Escrever `docs/sprints/sprint-05.md` (planejamento, critérios, contratos, regras, modelo, demo, riscos e ambiguidades).
 - [ ] Architect: validar a migration e as oito ambiguidades; registrar decisões finais em ADR quando houver mudança.
-- [ ] Migration `1795737600000-CreateResumeDomain` com as três tabelas, FKs explícitos, `unique(resume_id, version)` e índices.
-- [ ] Entidades `Resume`, `ResumeVersion` e `AtsAnalysis` e enums reaproveitados.
-- [ ] DTOs de request/response de currículo, versão e análise; nenhum DTO aceita `userId`/`user_id`.
-- [ ] `ResumesService`: CRUD de currículo, default único em transação, 409 em exclusão com versões.
-- [ ] Builder de snapshot a partir do perfil e geração de versão transacional com `pessimistic_write`.
-- [ ] `src/modules/ats/engine/normalizer.ts` e `job-parser.ts` (KAN-41).
-- [ ] `src/modules/ats/engine/resume-extractor.ts`, `scorer.ts` e `checks.ts` (KAN-42).
-- [ ] `AtsAnalysisService` e rotas de análise, com consulta da mais recente (KAN-43).
-- [ ] Controllers com `JwtAuthGuard`, `@CurrentUser()`, `ParseUUIDPipe`, Swagger e envelope paginado em `GET /v1/resumes`.
-- [ ] Testes unitários do motor com fixtures; e2e do fluxo criar→versionar→analisar→consultar.
-- [ ] `npm run lint`, `tsc`, `npm run build`, `npm test`, `npm run test:e2e`, cadeia de migration e `git diff --check`.
+- [x] Migration `1795737600000-CreateResumeDomain` com as três tabelas, FKs explícitos, `unique(resume_id, version)` e índices.
+- [x] Entidades `Resume`, `ResumeVersion` e `AtsAnalysis` e enums reaproveitados.
+- [x] DTOs de request/response de currículo, versão e análise; nenhum DTO aceita `userId`/`user_id`.
+- [x] `ResumesService`: CRUD de currículo, default único em transação, 409 em exclusão com versões.
+- [x] Builder de snapshot a partir do perfil e geração de versão transacional com `pessimistic_write`.
+- [x] `src/modules/ats/engine/normalizer.ts` e `job-parser.ts` (KAN-41).
+- [x] `src/modules/ats/engine/resume-extractor.ts`, `scorer.ts` e `checks.ts` (KAN-42).
+- [x] `AtsAnalysisService` e rotas de análise, com consulta da mais recente (KAN-43).
+- [x] Controllers com `JwtAuthGuard`, `@CurrentUser()`, `ParseUUIDPipe`, Swagger e envelope paginado em `GET /v1/resumes`.
+- [x] Testes unitários do motor com fixtures; e2e do fluxo criar→versionar→analisar→consultar.
+- [x] `npm run lint`, `tsc`, `npm run build`, `npm test`, `npm run test:e2e`, cadeia de migration e `git diff --check`.
 - [ ] Humano: validar as oito ambiguidades, executar a demo manual e decidir commit/PR/merge/deploy.
 
 ## Pendente de validação humana/architect

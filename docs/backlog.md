@@ -12,7 +12,7 @@ Status: `Planejado` | `Em andamento` | `Implementado localmente` | `Concluído` 
 | E1 | Autenticação e perfil | 1–2 | Concluído (PR #12 mergeado em main) |
 | E2 | Empresas, recrutadores e vagas | 3 | Concluído (PR #12 mergeado em main) |
 | E3 | Candidaturas e máquina de estados | 4 | Concluído (PR #12 mergeado em main) |
-| E4 | Currículos e motor ATS | 5 | Em planejamento (Sprint 5) |
+| E4 | Currículos e motor ATS | 5 | Implementado localmente (Sprint 5, aguardando revisão/commit) |
 | E5 | Export, dashboard e entrevistas | 6 | Planejado |
 | E6 | Hardening e release v1.0.0 | 7 | Planejado |
 
@@ -110,21 +110,26 @@ Status: `Planejado` | `Em andamento` | `Implementado localmente` | `Concluído` 
 
 | ID | História | Sprint | Status |
 |---|---|---|---|
-| KAN-40 | Criar currículo e gerar versão | 5 | Planejado (Sprint 5 — planejamento documentado na branch feat/sprint-5-resumes) |
-| KAN-41 | Extrair keywords da vaga | 5 | Planejado (Sprint 5 — planejamento documentado na branch feat/sprint-5-resumes) |
-| KAN-42 | Calcular score e checks | 5 | Planejado (Sprint 5 — planejamento documentado na branch feat/sprint-5-resumes) |
-| KAN-43 | Persistir e consultar análise | 5 | Planejado (Sprint 5 — planejamento documentado na branch feat/sprint-5-resumes) |
+| KAN-40 | Criar currículo e gerar versão | 5 | Implementado localmente (Sprint 5 - branch feat/sprint-5-resumes, aguardando revisão/commit) |
+| KAN-41 | Extrair keywords da vaga | 5 | Implementado localmente (Sprint 5 - branch feat/sprint-5-resumes, aguardando revisão/commit) |
+| KAN-42 | Calcular score e checks | 5 | Implementado localmente (Sprint 5 - branch feat/sprint-5-resumes, aguardando revisão/commit) |
+| KAN-43 | Persistir e consultar análise | 5 | Implementado localmente (Sprint 5 - branch feat/sprint-5-resumes, aguardando revisão/commit) |
 
-> **Sprint 5 (em planejamento):** branch de trabalho `feat/sprint-5-resumes`,
-> criada a partir de `46f4e8a` e ainda sem commits. Escopo previsto: KAN-40 a
-> KAN-43 — currículos versionados e ATS determinístico (`resumes`,
-> `resume_versions` (append-only) e `ats_analyses`; motor puro em
-> `src/modules/ats/engine/`; rotas `/v1/resumes`, `/v1/resumes/:id/versions`,
-> `/v1/resume-versions/:id`, `/analyze` e `/analysis`). O planejamento está
-> documentado em [`docs/sprints/sprint-05.md`](sprints/sprint-05.md) e
+> **Sprint 5 (implementada e validada localmente):** branch de trabalho
+> `feat/sprint-5-resumes`, criada a partir de `46f4e8a`. A implementação e a
+> validação local estão concluídas; **não há commit, push, PR, merge nem deploy**.
+> Escopo entregue: KAN-40 a KAN-43 — currículos versionados e ATS determinístico
+> (`resumes`, `resume_versions` (append-only) e `ats_analyses`; motor puro em
+> `src/modules/ats/engine/`; 9 rotas em `/v1/resumes` e
+> `/v1/resume-versions/:id`). Migration `1795737600000-CreateResumeDomain`
+> validada com `run` → `revert` → `run` → `show` e `schema:log` sem drift.
+> Validação local: `npm test` 311/311, `npm run test:e2e` 257/257 (inclui
+> `test/resumes.e2e-spec.ts` com 65 testes), `npx tsc --noEmit`, `npm run lint`,
+> `npm run build` e `git diff --check` exit 0. Decisões em
+> [`docs/sprints/sprint-05.md`](sprints/sprint-05.md) e
 > [`docs/adr/0005-sprint-5-resumes-ats.md`](adr/0005-sprint-5-resumes-ats.md).
-> **Nada foi implementado ainda** — sem código, rotas, entidades, migration ou
-> testes. Export JSON/HTML fica para a Sprint 6 (KAN-50/51).
+> **Pendentes:** revisão, commit, push, PR, merge/deploy, demo manual e portão
+> humano. Export JSON/HTML fica para a Sprint 6 (KAN-50/51).
 
 ### E5 — Export e dashboard
 
