@@ -139,6 +139,10 @@ export class JobsController {
   @ApiBadRequestResponse({ description: 'ID inválido' })
   @ApiNoContentResponse({ description: 'Vaga removida' })
   @ApiNotFoundResponse({ description: 'Vaga não encontrada' })
+  @ApiConflictResponse({
+    description:
+      'Cannot delete job with applications | Cannot delete job with ATS analyses',
+  })
   @ApiUnauthorizedResponse({ description: 'Token ausente, inválido ou expirado' })
   remove(
     @CurrentUser() user: AuthenticatedUser,
