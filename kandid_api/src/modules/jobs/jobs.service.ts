@@ -17,6 +17,7 @@ import {
   hasField,
 } from '../../common/utils/null-fields.js';
 import { Application } from '../applications/entities/application.entity.js';
+import { AtsAnalysis } from '../ats/entities/ats-analysis.entity.js';
 import { SkillResponseDto } from '../skills/dto/skill-response.dto.js';
 import { Skill } from '../skills/entities/skill.entity.js';
 import { Company } from '../companies/entities/company.entity.js';
@@ -84,8 +85,6 @@ export class JobsService {
     private readonly recruitersRepository: Repository<Recruiter>,
     @InjectRepository(Skill)
     private readonly skillsRepository: Repository<Skill>,
-    @InjectRepository(Application)
-    private readonly applicationsRepository: Repository<Application>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -272,13 +271,31 @@ export class JobsService {
 
   /** DELETE /v1/jobs/:id — job_skills é removida por cascata no banco. */
   async remove(userId: string, id: string): Promise<void> {
-    const job = await this.requireJob(userId, id);
+    await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(Job);
+      const job = await repository.findOne({
+        where: { id, userId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    if ((await this.applicationsRepository.countBy({ jobId: id })) > 0) {
-      throw new ConflictException('Cannot delete job with applications');
-    }
+      if (job === null) {
+        throw new NotFoundException('Job not found');
+      }
 
-    await this.jobsRepository.remove(job);
+      if (
+        (await manager.getRepository(Application).countBy({ jobId: id })) > 0
+      ) {
+        throw new ConflictException('Cannot delete job with applications');
+      }
+
+      if (
+        (await manager.getRepository(AtsAnalysis).countBy({ jobId: id })) > 0
+      ) {
+        throw new ConflictException('Cannot delete job with ATS analyses');
+      }
+
+      await repository.remove(job);
+    });
   }
 
   private async requireJob(userId: string, id: string): Promise<Job> {

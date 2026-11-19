@@ -5,7 +5,7 @@
 ![NestJS](https://img.shields.io/badge/NestJS-12-E0234E)
 ![Node.js](https://img.shields.io/badge/Node.js-24-339933)
 ![MySQL](https://img.shields.io/badge/MySQL-8.4-4479A1)
-![Status](https://img.shields.io/badge/status-Sprint_4-blue)
+![Status](https://img.shields.io/badge/status-Sprint_5_Implementada-blue)
 
 ## Visão geral
 
@@ -26,19 +26,16 @@ O Kandid propõe centralizar esse fluxo em uma única API:
 É um projeto **pessoal, de estudo e portfólio**, sem objetivo comercial. A
 especificação completa do domínio está em [`docs/prompt-kandid.md`](docs/prompt-kandid.md).
 
-> **Estado atual:** a Sprint 1 (autenticação) está concluída, com PR pendente. A
-> Sprint 2 (perfil profissional) foi implementada e validada localmente na branch
-> `feat/sprint-2-profile` (HEAD `00b0647`): perfil, experiências com bullets,
-> skills, formação, certificações e idiomas estão funcionais, sem HTTP 501 nas
-> rotas do domínio. A Sprint 3 (pipeline) também foi implementada localmente nessa
-> mesma branch: empresas, recrutadores e vagas com stack, senioridade, faixa
-> salarial, filtros e paginação. A Sprint 4 (candidaturas) também foi
-> implementada localmente nessa mesma branch: máquina de estados, histórico,
-> compensação, filtros e paginação. Commit e push dependem de aprovação humana;
-> PR, revisão, CI, testes e demo manual das Sprints 3 e 4 também estão pendentes.
-> Currículos e ATS ainda não foram implementados. Os workflows de
-> CD e Dependabot seguem ativos e sem alteração, com a decisão sobre o ambiente
-> demo registrada como pendência. Consulte [Status atual](#status-atual) e
+> **Estado atual:** as Sprints 1 a 4 foram concluídas e mergeadas em `main` via
+> **PR #12** (merge commit `46f4e8a`, que contém `00b0647`, `0066b85`, `5cc8855`
+> e `e7b082c`). Sobre o estado mergeado, `npm test` passou 232/232 e
+> `npm run test:e2e` passou 192/192, com lint, tipagem, build e
+> `git diff --check` verdes (1 warning preexistente em `test/auth.e2e-spec.ts:232`).
+> A Sprint 5 (KAN-40 a KAN-43: currículos versionados e ATS determinístico) está
+> **implementada e validada localmente** na branch `feat/sprint-5-resumes`,
+> aguardando revisão, commit e demo/portão humano; ainda não há merge nem deploy.
+> A demo manual da Sprint 4 e as 8 ambiguidades registradas seguem como portão
+> humano. Consulte [Status atual](#status-atual) e
 > [Roadmap](#roadmap-por-sprints).
 
 ## Escopo do MVP
@@ -108,12 +105,15 @@ Decisões que moldam o código:
 ## Arquitetura
 
 Monólito modular em NestJS. Hoje a aplicação tem a fundação, a autenticação e os
-domínios de perfil, pipeline e candidaturas implementados localmente:
+domínios de perfil, pipeline e candidaturas implementados e mergeados em `main`
+via PR #12, além de currículos e ATS implementados na branch
+`feat/sprint-5-resumes` (aguardando revisão e commit):
 
 - `main.ts` configura o prefixo `/v1`, o `ValidationPipe`, CORS, o Swagger e a
   porta;
 - `app.module.ts` carrega configuração validada, TypeORM, health, users, auth,
-  perfil, pipeline (companies, recruiters e jobs) e candidaturas (applications);
+  perfil, pipeline (companies, recruiters e jobs), candidaturas (applications) e
+  currículos/ATS (resumes e ats);
 - `database/data-source.ts` é o `DataSource` usado pelo CLI do TypeORM, com
   entidades e migrations carregadas por glob;
 - `database/migrations/1794182400000-CreateUsers.ts` cria a tabela `users`;
@@ -124,6 +124,8 @@ domínios de perfil, pipeline e candidaturas implementados localmente:
   `recruiters`, `jobs` e `job_skills`, com `jobs.company_id` em `RESTRICT`;
 - `database/migrations/1795046400000-CreateApplicationsDomain.ts` cria
   `applications` e `application_status_history` (tabela no singular);
+- `database/migrations/1795737600000-CreateResumeDomain.ts` cria `resumes`,
+  `resume_versions` e `ats_analyses` (Sprint 5, validada localmente);
 - `health` executa `SELECT 1` para reportar o estado do banco;
 - `modules/users` contém a entidade `User` (tabela `users`) e o `UsersService`;
 - `modules/auth` contém `AuthController`, `AuthService`, DTOs e a emissão de JWT;
@@ -140,23 +142,40 @@ domínios de perfil, pipeline e candidaturas implementados localmente:
 - `modules/applications` implementa a máquina de estados (`ApplicationStatus` e
   `APPLICATION_TRANSITIONS`), o histórico append-only, a compensação e os filtros
   da Sprint 4, com serviço transacional;
+- `modules/resumes` implementa as entidades `Resume` e `ResumeVersion` (snapshot
+  imutável em JSON), o `snapshot.builder`, DTOs, service e controllers, com as
+  rotas de `/v1/resumes` e `/v1/resume-versions/:id` (Sprint 5, branch
+  `feat/sprint-5-resumes`);
+- `modules/ats` implementa o motor puro em `ats/engine/` (`normalizer`,
+  `job-parser`, `resume-extractor`, `checks` e `scorer`), a entidade
+  `AtsAnalysis` e as rotas `POST /v1/resume-versions/:id/analyze` e
+  `GET /v1/resume-versions/:id/analysis`;
 - os controllers do domínio estão roteados, com guard JWT e Swagger; os services
-  implementam as regras de negócio das Sprints 2, 3 e 4, sem
-  `NotImplementedException` (HTTP 501) nas rotas de perfil, pipeline e
-  candidaturas;
+  implementam as regras de negócio das Sprints 2 a 5, sem
+  `NotImplementedException` (HTTP 501) nas rotas de perfil, pipeline,
+  candidaturas, currículos e ATS;
 - `common/utils` concentra os helpers puros de conversão e normalização; o PATCH
   usa `hasField` para distinguir campo ausente de `null`, e a leitura de `DATE`
   usa `extra: { dateStrings: ['DATE'] }` em `app.module.ts` e `data-source.ts`
   (decisões em [`ADR 0002`](docs/adr/0002-sprint-2-profile.md)); o pipeline e a
   resolução de conflitos de contrato estão em
   [`ADR 0003`](docs/adr/0003-sprint-3-pipeline.md); as candidaturas estão em
-  [`ADR 0004`](docs/adr/0004-sprint-4-applications.md);
+  [`ADR 0004`](docs/adr/0004-sprint-4-applications.md); currículos e ATS estão em
+  [`ADR 0005`](docs/adr/0005-sprint-5-resumes-ats.md);
 - `common/filters` concentra o filtro global de erros;
 - `common/guards` tem o `JwtAuthGuard`, implementado sem passport;
 - `common/decorators` tem o `@CurrentUser()`;
 - `common/interfaces` define o usuário autenticado;
 - `common/validators` tem o `IsDateOnly`, que exige datas estritas `YYYY-MM-DD`;
 - `common/utils` concentra a normalização de e-mail.
+
+Os domínios `modules/resumes` (currículos e `resume_versions` append-only) e
+`modules/ats` (motor determinístico em `ats/engine/`) foram implementados e
+validados localmente na branch `feat/sprint-5-resumes`, com contratos e decisões
+no [`ADR 0005`](docs/adr/0005-sprint-5-resumes-ats.md) e na
+[`sprint-05.md`](docs/sprints/sprint-05.md). Ainda não há commit, merge nem
+deploy. O próximo domínio é a Sprint 6: export JSON/HTML (KAN-50/51),
+entrevistas e dashboards.
 
 Novos módulos seguem o padrão `dto/`, `entities/`, `*.module.ts`,
 `*.controller.ts`, `*.service.ts` e `*.spec.ts`.
@@ -177,11 +196,17 @@ Kandid/
 ├── docs/
 │   ├── adr/
 │   │   ├── 0001-database.md
-│   │   └── 0002-sprint-2-profile.md
+│   │   ├── 0002-sprint-2-profile.md
+│   │   ├── 0003-sprint-3-pipeline.md
+│   │   ├── 0004-sprint-4-applications.md
+│   │   └── 0005-sprint-5-resumes-ats.md
 │   ├── sprints/
 │   │   ├── sprint-00.md
 │   │   ├── sprint-01.md
-│   │   └── sprint-02.md
+│   │   ├── sprint-02.md
+│   │   ├── sprint-03.md
+│   │   ├── sprint-04.md
+│   │   └── sprint-05.md
 │   ├── backlog.md
 │   ├── prompt-kandid.md         # spec e fonte da verdade do domínio
 │   ├── runbook-deploy.md
@@ -200,11 +225,12 @@ Kandid/
 │   │   ├── database/
 │   │   │   ├── data-source.ts
 │   │   │   ├── migrations/
+│   │   │   │   ├── 1794182400000-CreateUsers.ts
+│   │   │   │   ├── 1794268800000-CreateProfileDomain.ts
+│   │   │   │   ├── 1794960000000-CreatePipelineDomain.ts
+│   │   │   │   ├── 1795046400000-CreateApplicationsDomain.ts
+│   │   │   │   └── 1795737600000-CreateResumeDomain.ts
 │   │   │   └── seeds/              # seed do catálogo de skills (npm run seed:skills)
-│   │   │       ├── 1794182400000-CreateUsers.ts
-│   │   │       ├── 1794268800000-CreateProfileDomain.ts
-│   │   │       ├── 1794960000000-CreatePipelineDomain.ts
-│   │   │       └── 1795046400000-CreateApplicationsDomain.ts
 │   │   ├── health/
 │   │   ├── modules/
 │   │   │   ├── auth/
@@ -218,10 +244,17 @@ Kandid/
 │   │   │   ├── educations/          # implementado
 │   │   │   ├── certifications/      # implementado
 │   │   │   ├── languages/           # implementado
-│   │   │   └── users/
-│   │   │       ├── entities/
-│   │   │       ├── users.module.ts
-│   │   │       └── users.service.ts
+│   │   │   ├── users/
+│   │   │   │   ├── entities/
+│   │   │   │   ├── users.module.ts
+│   │   │   │   └── users.service.ts
+│   │   │   ├── companies/           # implementado (Sprint 3, PR #12)
+│   │   │   ├── recruiters/          # implementado (Sprint 3, PR #12)
+│   │   │   ├── jobs/                # implementado (Sprint 3, PR #12)
+│   │   │   ├── applications/        # implementado (Sprint 4, PR #12)
+│   │   │   ├── resumes/             # implementado (Sprint 5, feat/sprint-5-resumes)
+│   │   │   └── ats/                 # implementado (Sprint 5, feat/sprint-5-resumes)
+│   │   │       └── engine/          # motor ATS puro e determinístico
 │   │   ├── app.controller.ts
 │   │   ├── app.module.ts
 │   │   └── main.ts
@@ -236,12 +269,19 @@ Kandid/
 └── opencode.jsonc
 ```
 
+Os documentos da Sprint 5 (`sprint-05.md` e `ADR 0005`) registram o planejamento
+e as decisões. O código correspondente (`modules/resumes`, `modules/ats` e a
+migration `1795737600000-CreateResumeDomain`) está implementado na branch
+`feat/sprint-5-resumes`, aguardando revisão, commit e demo/portão humano.
+
 ### Modelo de domínio alvo
 
 Visão simplificada do modelo definido na spec. A entidade `USER` já existe na
 tabela `users`, e o primeiro bloco do domínio (`PROFILE`, `EXPERIENCE`,
 `EXPERIENCE_BULLET`, `SKILL`, `PROFILE_SKILL`, `EDUCATION`, `CERTIFICATION` e
 `LANGUAGE`) tem entidades, tabelas e regras de negócio entregues pela Sprint 2.
+O bloco de currículos e ATS (`RESUME`, `RESUME_VERSION` e `ATS_ANALYSIS`) tem
+entidades e tabelas entregues pela Sprint 5, na branch `feat/sprint-5-resumes`.
 Os demais domínios vêm nas próximas sprints.
 
 ```mermaid
@@ -293,13 +333,14 @@ Copy-Item .env.example .env
 O `docker-compose.yml` sobe MySQL 8.4 em `localhost:3306`, com banco `kandid` e
 usuário/senha `kandid`. Essas credenciais são apenas para desenvolvimento local.
 
-O `npm run migration:run` aplica as migrations versionadas:
+O `npm run migration:run` aplica as 5 migrations versionadas:
 `1794182400000-CreateUsers`, `1794268800000-CreateProfileDomain`,
-`1794960000000-CreatePipelineDomain` e
-`1795046400000-CreateApplicationsDomain`. O TypeORM também mantém a tabela de
-controle `migrations`; `synchronize` continua desativado. O `schema:log` via CLI
-direto (`npm run typeorm -- schema:log -d src/database/data-source.ts`) ficou sem
-drift após a migration de candidaturas.
+`1794960000000-CreatePipelineDomain`, `1795046400000-CreateApplicationsDomain`
+e `1795737600000-CreateResumeDomain` (tabelas `resumes`, `resume_versions` e
+`ats_analyses`, da Sprint 5). O TypeORM também mantém a tabela de controle
+`migrations`; `synchronize` continua desativado. O `schema:log` via CLI direto
+(`npm run typeorm -- schema:log -d src/database/data-source.ts`) ficou sem drift
+após a migration de currículos.
 
 O `npm run seed:skills` semeia o catálogo somente leitura com **118 skills e 84
 aliases**. É uma execução local e explícita (não roda no bootstrap nem em
@@ -324,8 +365,10 @@ docker compose down
 ## Endpoints disponíveis
 
 Esta tabela reflete o estado atual do código. As rotas de autenticação, perfil,
-pipeline e candidaturas estão implementadas e protegidas por JWT (exceto as rotas
-públicas indicadas).
+pipeline e candidaturas estão implementadas, protegidas por JWT (exceto as rotas
+públicas indicadas) e mergeadas em `main` via PR #12. As rotas de currículos e
+ATS estão implementadas na branch `feat/sprint-5-resumes`, aguardando revisão e
+commit; ainda não há merge nem deploy.
 
 | Método | Rota | Autenticação | Descrição | Situação |
 |---|---|---|---|---|
@@ -378,13 +421,22 @@ públicas indicadas).
 | `GET` | `/v1/jobs` | Bearer JWT | Lista vagas com `companyId`, `seniority`, `skillId`, `q`, `page` e `limit` | Implementada |
 | `GET` | `/v1/jobs/:id` | Bearer JWT | Retorna uma vaga com a stack aninhada | Implementada |
 | `PATCH` | `/v1/jobs/:id` | Bearer JWT | Atualiza vaga; `skills` substitui a stack | Implementada |
-| `DELETE` | `/v1/jobs/:id` | Bearer JWT | Remove uma vaga; 409 se houver candidatura | Implementada |
+| `DELETE` | `/v1/jobs/:id` | Bearer JWT | Remove uma vaga; 409 se houver candidatura ou análise ATS | Implementada |
 | `POST` | `/v1/jobs/:id/applications` | Bearer JWT | Cria uma candidatura para a vaga | Implementada |
 | `GET` | `/v1/applications` | Bearer JWT | Lista candidaturas com `status`, `companyId`, `from`, `to`, `page` e `limit` | Implementada |
 | `GET` | `/v1/applications/:id` | Bearer JWT | Retorna uma candidatura | Implementada |
 | `PATCH` | `/v1/applications/:id/status` | Bearer JWT | Transiciona o status e registra o histórico | Implementada |
 | `PATCH` | `/v1/applications/:id/compensation` | Bearer JWT | Atualiza os valores proposto e ofertado | Implementada |
 | `GET` | `/v1/applications/:id/history` | Bearer JWT | Retorna o histórico de status da candidatura | Implementada |
+| `POST` | `/v1/resumes` | Bearer JWT | Cria um currículo do usuário | Implementada (Sprint 5, local) |
+| `GET` | `/v1/resumes` | Bearer JWT | Lista currículos com `page` e `limit`, em envelope `{ data, meta }` | Implementada (Sprint 5, local) |
+| `GET` | `/v1/resumes/:id` | Bearer JWT | Retorna um currículo | Implementada (Sprint 5, local) |
+| `PATCH` | `/v1/resumes/:id` | Bearer JWT | Atualiza nome, cargo alvo e/ou default do currículo | Implementada (Sprint 5, local) |
+| `DELETE` | `/v1/resumes/:id` | Bearer JWT | Remove currículo; 409 se houver versões | Implementada (Sprint 5, local) |
+| `POST` | `/v1/resumes/:id/versions` | Bearer JWT | Gera versão imutável (snapshot JSON) a partir do perfil | Implementada (Sprint 5, local) |
+| `GET` | `/v1/resume-versions/:id` | Bearer JWT | Retorna uma versão imutável do currículo | Implementada (Sprint 5, local) |
+| `POST` | `/v1/resume-versions/:id/analyze` | Bearer JWT | Analisa a versão contra uma vaga do usuário | Implementada (Sprint 5, local) |
+| `GET` | `/v1/resume-versions/:id/analysis` | Bearer JWT | Retorna a análise ATS mais recente da versão | Implementada (Sprint 5, local) |
 | `GET` | `/docs` | Pública | Swagger UI (não faz parte do prefixo `/v1`) | Implementada |
 
 ### Exemplos com `curl`
@@ -596,10 +648,12 @@ Os testes usam Vitest com globals e supertest:
 |---|---|---|
 | Unitário — Sprint 1 (metadados, health, env, filtro, auth, users, guard e DTOs) | 8 | 50 |
 | Unitário — Sprint 2 (profiles, experiences, skills, educations, certifications, languages, utils e seed) | 13 | 182 |
-| **Total unitário** | **21 arquivos** | **232** |
+| Unitário — Sprint 5 (resumes e motor ATS: normalizer, job-parser, resume-extractor, checks e scorer) | 6 | 79 |
+| **Total unitário** | **27 arquivos** | **311** |
 | E2E — Sprint 1 (auth, API, health e erro) | 2 | 28 |
 | E2E — Sprint 2 (domínio de perfil: KAN-13 a KAN-16, com dois usuários e ownership) | 4 | 164 |
-| **Total e2e** | **6 arquivos** | **192** |
+| E2E — Sprint 5 (currículos, versões e ATS: KAN-40 a KAN-43) | 1 | 65 |
+| **Total e2e** | **7 arquivos** | **257** |
 
 Os testes unitários cobrem os arquivos `*.spec.ts`. Os testes e2e usam
 `*.e2e-spec.ts` e exigem um MySQL acessível: Docker Compose local ou o service
@@ -651,7 +705,7 @@ flowchart LR
 **CD temporariamente desativado.** Por decisão de priorizar a entrega da API, o
 deploy do ambiente demo e a escolha do banco remoto (KAN-7 e KAN-8) estão
 adiados. O `cd.yml` permanece versionado como referência, mas não há ambiente
-demo configurado. KAN-7 e KAN-8 voltam após o fechamento local da Sprint 4; até lá, o
+demo configurado. KAN-7 e KAN-8 voltam após a Sprint 5; até lá, o
 desenvolvimento usa MySQL local via Docker.
 
 Detalhes do workflow (para quando o CD for retomado):
@@ -715,17 +769,64 @@ atingido. O detalhamento está em [`docs/backlog.md`](docs/backlog.md).
 | Sprint | Foco | Status |
 |---|---|---|
 | 0 | Fundação, agentes e CI/CD | Concluída localmente (deploy adiado) |
-| 1 | Autenticação: registro, login e `GET /me` | Concluída (PR pendente) |
-| 2 | Perfil: experiências, skills, formação, certificações e idiomas | Concluída e validada localmente (commit/push pendentes) |
-| 3 | Empresas, recrutadores e vagas | Implementada localmente (demo/testes/commit pendentes) |
-| 4 | Candidaturas e máquina de estados | Implementada localmente (demo/testes/commit pendentes) |
-| 5 | Currículos, versionamento e motor ATS | Planejado |
+| 1 | Autenticação: registro, login e `GET /me` | Concluída (PR #12 mergeado em main) |
+| 2 | Perfil: experiências, skills, formação, certificações e idiomas | Concluída (PR #12 mergeado em main) |
+| 3 | Empresas, recrutadores e vagas | Concluída (PR #12 mergeado em main) |
+| 4 | Candidaturas e máquina de estados | Concluída (PR #12 mergeado em main) |
+| 5 | Currículos, versionamento e motor ATS | Implementada localmente (branch feat/sprint-5-resumes; revisão/commit e demo pendentes) |
 | 6 | Export JSON/HTML, entrevistas e dashboards | Planejado |
 | 7 | Seed de demonstração, hardening e release `v1.0.0` | Planejado |
 
+### Sprint 5 — Currículos e ATS (implementada e validada localmente)
+
+Branch `feat/sprint-5-resumes`, criada a partir de `46f4e8a`. Planejamento em
+[`docs/sprints/sprint-05.md`](docs/sprints/sprint-05.md) e decisões no
+[`ADR 0005`](docs/adr/0005-sprint-5-resumes-ats.md). A implementação e a
+validação local estão concluídas; **não há commit, push, PR, merge nem deploy**,
+e a demo manual/portão humano segue pendente.
+
+Entregue:
+
+- **KAN-40** — currículo com versão imutável em snapshot JSON
+  (`resumes` e `resume_versions` append-only), com `snapshot.builder` a partir
+  do perfil;
+- **KAN-41** — extração de keywords da vaga no motor puro (`job-parser`);
+- **KAN-42** — score e checks determinísticos no motor puro (`normalizer`,
+  `resume-extractor`, `checks` e `scorer`), sem IA;
+- **KAN-43** — persistência e consulta da análise em `ats_analyses`;
+- 9 rotas: 5 de `/v1/resumes` (`POST`, `GET`, `GET /:id`, `PATCH /:id`,
+  `DELETE /:id`), `POST /v1/resumes/:id/versions`,
+  `GET /v1/resume-versions/:id`, `POST /v1/resume-versions/:id/analyze` e
+  `GET /v1/resume-versions/:id/analysis`;
+- migration `1795737600000-CreateResumeDomain` com `resumes`, `resume_versions`
+  e `ats_analyses`, validada localmente com `run` → `revert` → `run` → `show` e
+  `schema:log` sem drift;
+- `DELETE /v1/jobs/:id` passa a responder 409 também quando a vaga tem análise
+  ATS; `applications` permanece intocada.
+
+Validação local registrada em 2026-11-19:
+
+| Verificação | Resultado |
+|---|---|
+| `npx tsc --noEmit` | Exit 0 |
+| `npm run lint` | Exit 0 (1 warning preexistente em `test/auth.e2e-spec.ts`) |
+| `npm run build` | Exit 0 |
+| `npm test` | 311/311 testes unitários |
+| `npm run test:e2e` | 257/257 testes e2e (inclui `test/resumes.e2e-spec.ts` com 65 testes) |
+| `git diff --check` | Exit 0 |
+| Migration local | `run` → `revert` → `run` → `show` e `schema:log` sem drift |
+
+Pendências:
+
+- revisão, commit e push da branch `feat/sprint-5-resumes` dependem de aprovação
+  humana; não houve PR, merge nem deploy;
+- demo manual da Sprint 5 e portão humano das 8 ambiguidades da Sprint 4;
+- export JSON/HTML fica para a Sprint 6 (KAN-50/51), junto de entrevistas e
+  dashboards.
+
 ## Status atual
 
-**Sprint 1 — Autenticação**, iniciada em 2026-11-09 e concluída (PR pendente).
+**Sprint 1 — Autenticação**, iniciada em 2026-11-09 e concluída (PR #12 mergeado em `main`).
 O objetivo é entregar a base de identidade da API: cadastro, login com JWT e
 consulta do usuário autenticado.
 
@@ -760,11 +861,13 @@ Pendências:
 - **Lint:** `npm run lint` executa com exit 0 nesta máquina; resta 1 warning
   preexistente em `test/auth.e2e-spec.ts:232`. O fallback (`npx oxlint` +
   `npx tsc --noEmit`) também está verde.
-- **PR e CI:** KAN-10, KAN-11 e KAN-12 estão implementadas, mas o PR e a execução
-  do CI ainda dependem do repositório remoto.
-- **Revisão humana:** aprovação final do PR pendente.
+- **PR e CI:** o PR #12, que cobre KAN-10 a KAN-12, foi mergeado em `main`
+  (`46f4e8a`). O histórico de checks do CI fica no GitHub; não há registro local
+  do resultado do CI.
+- **Revisão humana:** PR #12 aprovado e mergeado; seguem como portão a demo manual
+  da Sprint 4 e as 8 ambiguidades registradas.
 - **Deploy e banco remoto:** KAN-7 e KAN-8 adiados conscientemente para priorizar
-  a API; retomam após o fechamento local da Sprint 4.
+  a API; retomam após a Sprint 5.
 - **Proteção de branch:** configuração da `main` com PR obrigatório e checks
   pendente de configuração humana no GitHub.
 
@@ -774,7 +877,8 @@ Branch `feat/sprint-2-profile`, HEAD `00b0647`. Validação local em 2026-11-18:
 `npm run lint` exit 0 (1 warning preexistente), `npx tsc --noEmit` e
 `npm run build` exit 0, 232/232 testes unitários em 21 arquivos, 192/192 e2e em
 6 arquivos, `npm run migration:run` sem pendências e seed executado 2x com
-118 skills e 84 aliases.
+118 skills e 84 aliases. As Sprints 2 a 4 foram mergeadas em `main` via PR #12
+(`46f4e8a`).
 
 Entregue:
 
@@ -792,17 +896,19 @@ Entregue:
 
 Pendente:
 
-- commit, push, PR, revisão e CI humanos — nada foi enviado ao remoto;
+- demo manual e portão humano das ambiguidades da Sprint 4; decisão sobre
+  CD/ambiente demo (KAN-7/KAN-8) retomada após a Sprint 5;
 - os workflows de CD e Dependabot seguem ativos e sem alteração; a decisão
   sobre o ambiente demo continua registrada como pendência.
 
-### Sprint 3 — Pipeline (implementada localmente)
+### Sprint 3 — Pipeline (implementada e validada, PR #12 mergeado)
 
-Branch `feat/sprint-2-profile`, mesma da Sprint 2, HEAD `00b0647`. Nenhuma branch
-nova, nenhum commit e nenhum push. Validação local em 2026-11-18: `npm run lint`
-exit 0 (1 warning preexistente), `npx tsc --noEmit` e `npm run build` exit 0,
-migration `1794960000000-CreatePipelineDomain` aplicada, revertida e reaplicada,
-`schema:log` sem drift e nenhum teste unitário/e2e executado por decisão humana.
+Branch `feat/sprint-2-profile`, mesma da Sprint 2, HEAD `00b0647`, mergeada em
+`main` via **PR #12** (`46f4e8a`). Sobre o estado mergeado: `npm test` 232/232 em
+21 arquivos e `npm run test:e2e` 192/192 em 6 arquivos, `npm run lint` exit 0
+(1 warning preexistente em `test/auth.e2e-spec.ts:232`), `npx tsc --noEmit` e
+`npm run build` exit 0, migration `1794960000000-CreatePipelineDomain` aplicada,
+revertida e reaplicada, `schema:log` sem drift.
 
 Entregue:
 
@@ -819,17 +925,18 @@ Entregue:
 
 Pendente:
 
-- testes unitários/e2e e demo manual com dois usuários, a cargo do humano;
-- commit, push, PR, revisão, CI, merge e deploy — nada foi enviado ao remoto.
+- demo manual das Sprints 3 e 4 e portão humano das ambiguidades da Sprint 4.
 
-### Sprint 4 — Candidaturas (implementada localmente)
+### Sprint 4 — Candidaturas (implementada e validada, PR #12 mergeado)
 
-Branch `feat/sprint-2-profile`, mesma das Sprints 2 e 3, HEAD `00b0647`. Nenhuma
-branch nova, nenhum commit e nenhum push. Validação local em 2026-11-18:
-`npm run lint` exit 0 (1 warning preexistente em `test/auth.e2e-spec.ts:232`),
-`npx tsc --noEmit` e `npm run build` exit 0, `git diff --check` exit 0, migration
-`1795046400000-CreateApplicationsDomain` aplicada, revertida e reaplicada,
-`migration:show` com 4 migrações aplicadas e `schema:log` via CLI direto
+Branch `feat/sprint-2-profile`, mesma das Sprints 2 e 3, HEAD `00b0647`, mergeada
+em `main` via **PR #12** (`46f4e8a`), sem release ou deploy. Sobre o estado
+mergeado: `npm test` 232/232 em 21 arquivos e `npm run test:e2e` 192/192 em 6
+arquivos; `npm run lint` exit 0 (1 warning preexistente em
+`test/auth.e2e-spec.ts:232`), `npx tsc --noEmit` e `npm run build` exit 0,
+`git diff --check` exit 0, migration `1795046400000-CreateApplicationsDomain`
+aplicada, revertida e reaplicada, `migration:show` com 4 migrações aplicadas e
+`schema:log` via CLI direto
 (`npm run typeorm -- schema:log -d src/database/data-source.ts`) sem drift.
 
 Entregue:
@@ -849,8 +956,37 @@ Entregue:
 
 Pendente:
 
-- testes unitários/e2e e demo manual não foram escritos nem executados;
-- commit, push, PR, revisão, CI, merge e deploy — nada foi enviado ao remoto.
+- demo manual da Sprint 4 não executada;
+- 8 ambiguidades de contrato seguem sujeitas ao portão humano — nenhuma bloqueou
+  o merge do PR #12.
+
+### Sprint 5 — Currículos e ATS (implementada e validada localmente)
+
+Branch `feat/sprint-5-resumes`, criada a partir de `46f4e8a`, ainda sem commit,
+push ou PR. Validação local em 2026-11-19: `npx tsc --noEmit` exit 0,
+`npm run lint` exit 0 (1 warning preexistente em `test/auth.e2e-spec.ts`),
+`npm run build` exit 0, `npm test` 311/311, `npm run test:e2e` 257/257 (inclui
+`test/resumes.e2e-spec.ts` com 65 testes) e `git diff --check` exit 0; migration
+`1795737600000-CreateResumeDomain` validada com `run` → `revert` → `run` →
+`show` e `schema:log` sem drift.
+
+Entregue:
+
+- `modules/resumes` com as entidades `Resume` e `ResumeVersion` (snapshot JSON
+  imutável, append-only), DTOs, `snapshot.builder`, `ResumesService` e
+  controllers;
+- `modules/ats` com o motor puro em `ats/engine/` (`normalizer`, `job-parser`,
+  `resume-extractor`, `checks` e `scorer`), a entidade `AtsAnalysis` e o
+  service/controller de análise;
+- 9 rotas em `/v1`: 5 de currículos, geração de versão, leitura de versão,
+  `analyze` e `analysis`; não há export (KAN-50/51 na Sprint 6);
+- `DELETE /v1/jobs/:id` → 409 quando a vaga tem análise ATS; `applications`
+  intocada.
+
+Pendente:
+
+- revisão, commit, push, PR, merge e deploy dependem de aprovação humana;
+- demo manual da Sprint 5 e portão humano das 8 ambiguidades da Sprint 4.
 
 ## Documentação
 
@@ -867,6 +1003,8 @@ Pendente:
   validação da Sprint 3.
 - [`docs/sprints/sprint-04.md`](docs/sprints/sprint-04.md) — escopo, contratos e
   validação da Sprint 4.
+- [`docs/sprints/sprint-05.md`](docs/sprints/sprint-05.md) — escopo, contratos e
+  validação local da Sprint 5.
 - [`docs/adr/0001-database.md`](docs/adr/0001-database.md) — decisão de banco do
   ambiente demo (Proposed).
 - [`docs/adr/0002-sprint-2-profile.md`](docs/adr/0002-sprint-2-profile.md) —
@@ -876,6 +1014,8 @@ Pendente:
   modelo, contratos e decisões da Sprint 3 (Accepted).
 - [`docs/adr/0004-sprint-4-applications.md`](docs/adr/0004-sprint-4-applications.md) —
   modelo, contratos e decisões da Sprint 4.
+- [`docs/adr/0005-sprint-5-resumes-ats.md`](docs/adr/0005-sprint-5-resumes-ats.md) —
+  modelo, contratos e decisões da Sprint 5 (currículos e ATS).
 - [`docs/runbook-deploy.md`](docs/runbook-deploy.md) — deploy, migrations e
   rollback.
 
